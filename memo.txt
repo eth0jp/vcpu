@@ -1,0 +1,39 @@
+jslinux
+
+
+TSC => ea.cycle_count
+EIP => ea.eip
+EAX => ea.regs[0]
+ECX => ea.regs[1]
+EDX => ea.regs[2]
+EBX => ea.regs[3]
+ESP => ea.regs[4]
+EBP => ea.regs[5]
+
+ESI => ea.regs[6]
+EDI => ea.regs[7]
+
+EFL => ea.eflags
+OP  => ea.cc_op
+SRC => ea.cc_src
+DST => ea.cc_dst
+OP2 => ea.cc_op2
+DST2 =>ea.cc_dst2
+
+CPL => ea.cpl
+CR0 => ea.cr0
+CR2 => ea.cr2
+CR3 => ea.cr3
+CR4 => ea.cr4
+
+ES  => ea.segs[0]
+CS  => ea.segs[1]
+SS  => ea.segs[2]
+DS  => ea.segs[3]
+FS  => ea.segs[4]
+GS  => ea.segs[5]
+LDT => ea.ldt
+TR  => ea.tr
+
+GDT => ea.gdt
+IDT => ea.idt
