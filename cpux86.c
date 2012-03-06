@@ -400,17 +400,17 @@ int is_cpu_modrm_r(CPUx86 *cpu)
 	return cpu_modrm_reg(cpu) && cpu_modrm_rm(cpu);
 }
 
-int sib_scale(CPUx86 *cpu)
+int cpu_sib_scale(CPUx86 *cpu)
 {
 	return cpu->sib>>6 & 0x03;
 }
 
-int sib_index(CPUx86 *cpu)
+int cpu_sib_index(CPUx86 *cpu)
 {
 	return cpu->sib>>3 & 0x03;
 }
 
-int sib_base(CPUx86 *cpu)
+int cpu_sib_base(CPUx86 *cpu)
 {
 	return cpu->sib & 0x03;
 }
