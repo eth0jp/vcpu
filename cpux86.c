@@ -56,10 +56,42 @@ typedef struct {
 	size_t mem_size;
 
 	// 処理中
-	uint8 prefix;
+	struct {
+		uint8 operand_size :1;	// 0x66 オペランドサイズプリフィックス
+		uint8 address_size :1;	// 0x67 アドレスサイズプリフィックス
+		uint8 segment_cs :1;	// 0x2E セグメントオーバーライドプリフィックス(CS)
+		uint8 segment_ss :1;	// 0x36 セグメントオーバーライドプリフィックス(SS)
+		uint8 segment_ds :1;	// 0x3E セグメントオーバーライドプリフィックス(DS)
+		uint8 segment_es :1;	// 0x26 セグメントオーバーライドプリフィックス(ES)
+		uint8 segment_fs :1;	// 0x64 セグメントオーバーライドプリフィックス(FS)
+		uint8 segment_gs :1;	// 0x65 セグメントオーバーライドプリフィックス(GS)
+		uint8 repne :1;			// 0xF2 リピートプリフィックス(REPNE/REPZE)
+		uint8 rep :1;			// 0xF3 リピートプリフィックス(REP/REPE/REPZ)
+		uint8 rex :4;			// 0x40~0x4F REXプリフィックス
+		uint32 vex3;			// 0xC4 VEXプリフィックス
+		uint16 vex2;			// 0xC5 VEXプリフィックス
+	} prefix;
 	uint8 modrm;
 	uint8 sib;
 } CPUx86;
+
+
+void cpu_prefix_reset(CPUx86 *cpu)
+{
+	cpu->prefix.operand_size = 0;
+	cpu->prefix.address_size = 0;
+	cpu->prefix.segment_cs = 0;
+	cpu->prefix.segment_ss = 0;
+	cpu->prefix.segment_ds = 0;
+	cpu->prefix.segment_es = 0;
+	cpu->prefix.segment_fs = 0;
+	cpu->prefix.segment_gs = 0;
+	cpu->prefix.repne = 0;
+	cpu->prefix.rep = 0;
+	cpu->prefix.rex = 0;
+	cpu->prefix.vex3 = 0;
+	cpu->prefix.vex2 = 0;
+}
 
 
 // register
@@ -76,41 +108,41 @@ typedef struct {
 
 // EFLAGS
 
-#define EFLAGS_CF		0x00000001
-#define EFLAGS_PF		0x00000004
-#define EFLAGS_AF		0x00000010
-#define EFLAGS_ZF		0x00000040
-#define EFLAGS_SF		0x00000080
-#define EFLAGS_TF		0x00000100
-#define EFLAGS_IF		0x00000200
-#define EFLAGS_DF		0x00000400
-#define EFLAGS_OF		0x00000800
-#define EFLAGS_IOPL		0x00003000
-#define EFLAGS_NT		0x00004000
-#define EFLAGS_RF		0x00010000
-#define EFLAGS_VM		0x00020000
-#define EFLAGS_AC		0x00040000
-#define EFLAGS_VIF		0x00080000
-#define EFLAGS_VIP		0x00100000
-#define EFLAGS_ID		0x00200000
+#define CPU_EFLAGS_CF		0x00000001
+#define CPU_EFLAGS_PF		0x00000004
+#define CPU_EFLAGS_AF		0x00000010
+#define CPU_EFLAGS_ZF		0x00000040
+#define CPU_EFLAGS_SF		0x00000080
+#define CPU_EFLAGS_TF		0x00000100
+#define CPU_EFLAGS_IF		0x00000200
+#define CPU_EFLAGS_DF		0x00000400
+#define CPU_EFLAGS_OF		0x00000800
+#define CPU_EFLAGS_IOPL		0x00003000
+#define CPU_EFLAGS_NT		0x00004000
+#define CPU_EFLAGS_RF		0x00010000
+#define CPU_EFLAGS_VM		0x00020000
+#define CPU_EFLAGS_AC		0x00040000
+#define CPU_EFLAGS_VIF		0x00080000
+#define CPU_EFLAGS_VIP		0x00100000
+#define CPU_EFLAGS_ID		0x00200000
 
-#define EFLAGS_CF_BIT	0
-#define EFLAGS_PF_BIT	2
-#define EFLAGS_AF_BIT	4
-#define EFLAGS_ZF_BIT	6
-#define EFLAGS_SF_BIT	7
-#define EFLAGS_TF_BIT	8
-#define EFLAGS_IF_BIT	9
-#define EFLAGS_DF_BIT	10
-#define EFLAGS_OF_BIT	11
-#define EFLAGS_IOPL_BIT	12
-#define EFLAGS_NT_BIT	14
-#define EFLAGS_RF_BIT	16
-#define EFLAGS_VM_BIT	17
-#define EFLAGS_AC_BIT	18
-#define EFLAGS_VIF_BIT	19
-#define EFLAGS_VIP_BIT	20
-#define EFLAGS_ID_BIT	21
+#define CPU_EFLAGS_CF_BIT	0
+#define CPU_EFLAGS_PF_BIT	2
+#define CPU_EFLAGS_AF_BIT	4
+#define CPU_EFLAGS_ZF_BIT	6
+#define CPU_EFLAGS_SF_BIT	7
+#define CPU_EFLAGS_TF_BIT	8
+#define CPU_EFLAGS_IF_BIT	9
+#define CPU_EFLAGS_DF_BIT	10
+#define CPU_EFLAGS_OF_BIT	11
+#define CPU_EFLAGS_IOPL_BIT	12
+#define CPU_EFLAGS_NT_BIT	14
+#define CPU_EFLAGS_RF_BIT	16
+#define CPU_EFLAGS_VM_BIT	17
+#define CPU_EFLAGS_AC_BIT	18
+#define CPU_EFLAGS_VIF_BIT	19
+#define CPU_EFLAGS_VIP_BIT	20
+#define CPU_EFLAGS_ID_BIT	21
 
 #define set_cpu_eflags(cpu, type, val)	(cpu->eflags ^= ((val) << type##_BIT) ^ (type & cpu->eflags))
 #define cpu_eflags(cpu, type)			((cpu->eflags & type) >> type##_BIT)
@@ -157,7 +189,7 @@ typedef struct {
 	uint8 baseH;
 } SegDesc;
 
-#define segdesc_limit(desc)	(((desc)->limitH & 0x0F << 16) | ((desc)->limitL))
+#define segdesc_limit(desc)	(segdesc_g(desc) ? (((desc)->limitH & 0x0F << 16) | ((desc)->limitL)) << 12 : ((desc)->limitH & 0x0F << 16) | ((desc)->limitL))
 #define segdesc_base(desc)	(((desc)->baseH << 24) | ((desc)->baseM << 16) | ((desc)->baseL))
 
 #define segdesc_p(desc)		(((desc)->type >> 7) & 0x01)
@@ -217,6 +249,58 @@ typedef struct {
 								(u)->type==2 ? (*((u)->ptr.uint16p)=val&0xFFFF) : \
 								(*((u)->ptr.uint32p)=val&0xFFFFFFFF) )
 
+void uintx_read(uintx *x, void *target, int len)
+{
+	uintp targetp;
+	targetp.ptr.voidp = target;
+
+	if (len==1) {
+		x->val.uint8 = *(targetp.ptr.uint8p);
+		x->type = 1;
+	} else if (len==2) {
+		x->val.uint16 = *(targetp.ptr.uint16p);
+		x->type = 2;
+	} else {
+		x->val.uint32 = *(targetp.ptr.uint32p);
+		x->type = 4;
+	}
+}
+
+void uintp_val_copy(void *dst, int dstlen, void *src, int srclen)
+{
+	uintp dstp;
+	uintp srcp;
+
+	dstp.ptr.voidp = dst;
+	srcp.ptr.voidp = src;
+
+	if (dstlen==1) {
+		if (srclen==1) {
+			*(dstp.ptr.uint8p) = *(srcp.ptr.uint8p);
+		} else if (srclen==2) {
+			*(dstp.ptr.uint8p) = *(srcp.ptr.uint16p);
+		} else {
+			*(dstp.ptr.uint8p) = *(srcp.ptr.uint32p);
+		}
+	} else if (dstlen==2) {
+		if (srclen==1) {
+			*(dstp.ptr.uint16p) = *(srcp.ptr.uint8p);
+		} else if (srclen==2) {
+			*(dstp.ptr.uint16p) = *(srcp.ptr.uint16p);
+		} else {
+			*(dstp.ptr.uint16p) = *(srcp.ptr.uint32p);
+		}
+	} else {
+		if (srclen==1) {
+			*(dstp.ptr.uint32p) = *(srcp.ptr.uint8p);
+		} else if (srclen==2) {
+			*(dstp.ptr.uint32p) = *(srcp.ptr.uint16p);
+		} else {
+			*(dstp.ptr.uint32p) = *(srcp.ptr.uint32p);
+		}
+	}
+}
+
 
 // memory
 
@@ -234,20 +318,29 @@ uint8 mem_eip_load8(CPUx86 *cpu)
 uint16 mem_eip_load16(CPUx86 *cpu)
 {
 	uint16 val = cpu->mem[cpu->eip] + (cpu->mem[cpu->eip+1]<<8);
-	cpu->eip +=2;
+	cpu->eip += 2;
+	return val;
+}
+
+uint32 mem_eip_load24(CPUx86 *cpu)
+{
+	uint32 val = cpu->mem[cpu->eip] + (cpu->mem[cpu->eip+1]<<8) + (cpu->mem[cpu->eip+2]<<16);
+	cpu->eip += 3;
 	return val;
 }
 
 uint32 mem_eip_load32(CPUx86 *cpu)
 {
 	uint32 val = cpu->mem[cpu->eip] + (cpu->mem[cpu->eip+1]<<8) + (cpu->mem[cpu->eip+2]<<16) + (cpu->mem[cpu->eip+3]<<24);
-	cpu->eip +=4;
+	cpu->eip += 4;
 	return val;
 }
 
-void* mem_eip_ptr(CPUx86 *cpu)
+void* mem_eip_ptr(CPUx86 *cpu, int add)
 {
-	return &(cpu->mem[cpu->eip]);
+	void *p = &(cpu->mem[cpu->eip]);
+	cpu->eip += add;
+	return p;
 }
 
 
@@ -306,6 +399,8 @@ int is_modrm_r(CPUx86 *cpu)
 	return modrm_reg(cpu) && modrm_rm(cpu);
 }
 
+#define cpu_operand_size(cpu)	(((cpu_cr0(cpu, CR0_PE) + ((cpu)->prefix==0x66 ? 1 : 0)) % 2) ? 4 : 2)
+
 
 // stack
 
@@ -336,65 +431,13 @@ void ret(CPUx86 *cpu, uint32 val)
 
 // opcode
 
-void uintx_load(uintx *x, void *target, int len)
-{
-	uintp targetp;
-	targetp.ptr.voidp = target;
-
-	if (len==1) {
-		x->val.uint8 = *(targetp.ptr.uint8p);
-		x->type = 1;
-	} else if (len==2) {
-		x->val.uint16 = *(targetp.ptr.uint16p);
-		x->type = 2;
-	} else {
-		x->val.uint32 = *(targetp.ptr.uint32p);
-		x->type = 4;
-	}
-}
-
-void uintp_val_copy(void *dst, int dstlen, void *src, int srclen)
-{
-	uintp dstp;
-	uintp srcp;
-
-	dstp.ptr.voidp = dst;
-	srcp.ptr.voidp = src;
-
-	if (dstlen==1) {
-		if (srclen==1) {
-			*(dstp.ptr.uint8p) = *(srcp.ptr.uint8p);
-		} else if (srclen==2) {
-			*(dstp.ptr.uint8p) = *(srcp.ptr.uint16p);
-		} else {
-			*(dstp.ptr.uint8p) = *(srcp.ptr.uint32p);
-		}
-	} else if (dstlen==2) {
-		if (srclen==1) {
-			*(dstp.ptr.uint16p) = *(srcp.ptr.uint8p);
-		} else if (srclen==2) {
-			*(dstp.ptr.uint16p) = *(srcp.ptr.uint16p);
-		} else {
-			*(dstp.ptr.uint16p) = *(srcp.ptr.uint32p);
-		}
-	} else {
-		if (srclen==1) {
-			*(dstp.ptr.uint32p) = *(srcp.ptr.uint8p);
-		} else if (srclen==2) {
-			*(dstp.ptr.uint32p) = *(srcp.ptr.uint16p);
-		} else {
-			*(dstp.ptr.uint32p) = *(srcp.ptr.uint32p);
-		}
-	}
-}
-
 void opcode_add(CPUx86 *cpu, void *dst, int dstlen, void *src, int srclen)
 {
 	uintx dstx;
 	uintx srcx;
 
-	uintx_load(&dstx, dst, dstlen);
-	uintx_load(&srcx, src, srclen);
+	uintx_read(&dstx, dst, dstlen);
+	uintx_read(&srcx, src, srclen);
 
 	set_uintx_val(&dstx, uintx_val(&dstx) + uintx_val(&srcx));
 }
@@ -459,196 +502,216 @@ void exec_cpux86(CPUx86 *cpu)
 	uint8 opcode;
 	int c=0;
 	int i;
-
-/*
-	for (i=0x3000; i<0x3010; i++) {
-		printf("%08X: %02X\n", i, cpu->mem[i]);
-	}
-*/
+	int is_prefix;
 
 	while (c++<20) {
 		dump_cpu(cpu);
 
-		opcode = mem_eip_load8(cpu);
+		cpu_prefix_reset(cpu);
+		is_prefix = 1;
 
-		printf("eip: %08X opcode: %X\n", cpu->eip-1, opcode);
-
-		// prefix
-		switch (opcode) {
-		case 0x66:
-			// オペランドサイズプリフィックス
-		case 0x67:
-			// アドレスサイズプリフィックス
-		case 0x26:
-		case 0x2E:
-		case 0x36:
-		case 0x3E:
-		case 0x64:
-		case 0x65:
-			// セグメントオーバーライドプリフィックス
-		case 0xF2:
-		case 0xF3:
-			// リピートプリフィックス
-		case 0x40:
-		case 0x41:
-		case 0x42:
-		case 0x43:
-		case 0x44:
-		case 0x45:
-		case 0x46:
-		case 0x47:
-		case 0x48:
-		case 0x49:
-		case 0x4A:
-		case 0x4B:
-		case 0x4C:
-		case 0x4D:
-		case 0x4E:
-		case 0x4F:
-			// REXプリフィックス
-		case 0xC4:
-		case 0xC5:
-			// VEXプリフィックス
-			cpu->prefix = opcode;
+		while (is_prefix) {
 			opcode = mem_eip_load8(cpu);
-			break;
-		default:
-			cpu->prefix = 0;
-		}
+			printf("eip: %08X opcode: %X\n", cpu->eip-1, opcode);
 
-		if (opcode!=0x0F) {
-			// 1byte opcode
-
+			// prefix
 			switch (opcode) {
-			// 0x50
-			case 0x50:	// 50 sz : push eax
-			case 0x51:	// 51 sz : push ecx
-			case 0x52:	// 52 sz : push edx
-			case 0x53:	// 53 sz : push ebx
-			case 0x54:	// 54 sz : push esp
-			case 0x55:	// 55 sz : push ebp
-			case 0x56:	// 56 sz : push esi
-			case 0x57:	// 57 sz : push edi
-				stack_push(cpu, cpu->regs[opcode & 0x07]);
+			case 0x66:	// オペランドサイズプリフィックス
+				cpu->prefix.operand_size = 1;
+				break;
+			case 0x67:	// アドレスサイズプリフィックス
+				cpu->prefix.address_size = 1;
+				break;
+			case 0x26:	// セグメントオーバーライドプリフィックス(CS)
+				cpu->prefix.segment_cs = 1;
+				break;
+			case 0x2E:	// セグメントオーバーライドプリフィックス(SS)
+				cpu->prefix.segment_ss = 1;
+				break;
+			case 0x36:	// セグメントオーバーライドプリフィックス(DS)
+				cpu->prefix.segment_ds = 1;
+				break;
+			case 0x3E:	// セグメントオーバーライドプリフィックス(ES)
+				cpu->prefix.segment_es = 1;
+				break;
+			case 0x64:	// セグメントオーバーライドプリフィックス(FS)
+				cpu->prefix.segment_fs = 1;
+				break;
+			case 0x65:	// セグメントオーバーライドプリフィックス(GS)
+				cpu->prefix.segment_gs = 1;
+				break;
+			case 0xF2:	// リピートプリフィックス(REPNE/REPZE)
+				cpu->prefix.repne = 1;
+				break;
+			case 0xF3:	// リピートプリフィックス(REP/REPE/REPZ)
+				cpu->prefix.rep = 1;
 				break;
 
-			// 0x80
-			case 0x83:
-				// 83 /0 ib sz : add r/m32 imm8
-				// 83 /1 ib sz : or r/m32 imm8
-				// 83 /2 ib sz : adc r/m32 imm8
-				// 83 /3 ib sz : sbb r/m32 imm8
-				// 83 /4 ib sz : and r/m32 imm8
-				// 83 /5 ib sz : sub r/m32 imm8
-				// 83 /6 ib sz : xor r/m32 imm8
-				// 83 /7 ib sz : cmp r/m32 imm8
-				mem_eip_load_modrm(cpu);
-				switch (modrm_mod(cpu)) {
-				case 0x00:
-					printf("todo opcode 0x83 mod 0x00\n");
-					exit(1);
-					break;
-				case 0x01:
-					printf("todo opcode 0x83 mod 0x01\n");
-					exit(1);
-					break;
-				case 0x03:
-					printf("todo opcode 0x83 mod 0x03\n");
-					exit(1);
-					break;
-				case 0x04:
-					switch (modrm_reg(cpu)) {
-					case 0:
-						//cpu->regs[modrm_rm(cpu)] += mem_eip_load8(cpu);
-						opcode_add(cpu, &(cpu->regs[modrm_rm(cpu)]), 4, mem_eip_ptr(cpu), 1);
-						break;
-					case 1:
-						cpu->regs[modrm_rm(cpu)] |= mem_eip_load8(cpu);
-						break;
-					case 2:
-						cpu->regs[modrm_rm(cpu)] += mem_eip_load8(cpu) + cpu_eflags(cpu, EFLAGS_CF);
-						// todo set flag: OF SF ZF AF PF
-						printf("todo opcode 0x83 mod 0x04 reg 0x02\n");
-						exit(1);
-						break;
-					case 3:
-						cpu->regs[modrm_rm(cpu)] -= mem_eip_load8(cpu) + cpu_eflags(cpu, EFLAGS_CF);
-						// todo set flag: OF SF ZF AF PF CF
-						printf("todo opcode 0x83 mod 0x04 reg 0x03\n");
-						break;
-					case 4:
-						cpu->regs[modrm_rm(cpu)] &= mem_eip_load8(cpu);
-						// todo set flag: OF CF SF ZF PF
-						printf("todo opcode 0x83 mod 0x04 reg 0x04\n");
-						break;
-					case 5:
-						cpu->regs[modrm_rm(cpu)] -= mem_eip_load8(cpu);
-						// todo set flag: OF SF ZF AF PF CF
-						printf("todo opcode 0x83 mod 0x04 reg 0x05\n");
-						break;
-					case 6:
-						cpu->regs[modrm_rm(cpu)] ^= mem_eip_load8(cpu);
-						// todo set flag: OF CF SF ZF PF
-						printf("todo opcode 0x83 mod 0x04 reg 0x06\n");
-						break;
-					case 7:
-						set_cpu_eflags(cpu, EFLAGS_ZF, cpu->regs[modrm_rm(cpu)]==mem_eip_load8(cpu) ? 1 : 0);
-						// todo set flag: CF OF SF ZF AF PF
-						printf("todo opcode 0x83 mod 0x04 reg 0x07\n");
-						break;
-					}
-					break;
-				}
+			case 0x40:	// REXプリフィックス
+			case 0x41:	// REXプリフィックス
+			case 0x42:	// REXプリフィックス
+			case 0x43:	// REXプリフィックス
+			case 0x44:	// REXプリフィックス
+			case 0x45:	// REXプリフィックス
+			case 0x46:	// REXプリフィックス
+			case 0x47:	// REXプリフィックス
+			case 0x48:	// REXプリフィックス
+			case 0x49:	// REXプリフィックス
+			case 0x4A:	// REXプリフィックス
+			case 0x4B:	// REXプリフィックス
+			case 0x4C:	// REXプリフィックス
+			case 0x4D:	// REXプリフィックス
+			case 0x4E:	// REXプリフィックス
+			case 0x4F:	// REXプリフィックス
+				cpu->prefix.rex = opcode;
 				break;
-			case 0x89:	// 89 /r sz : mov r/m32 r32
-				mem_eip_load_modrm(cpu);
-				if (is_modrm_r(cpu)) {
-					switch (modrm_mod(cpu)) {
-					case 0x00:
-						printf("todo opcode 0x89 mod 0x00\n");
-						exit(1);
-						break;
-					case 0x01:
-						printf("todo opcode 0x89 mod 0x01\n");
-						exit(1);
-						break;
-					case 0x02:
-						printf("todo opcode 0x89 mod 0x02\n");
-						exit(1);
-						break;
-					case 0x03:
-						cpu->regs[modrm_rm(cpu)] = cpu->regs[modrm_reg(cpu)];
-						break;
-					}
-				}
+			case 0xC4:	// VEXプリフィックス(3byte)
+				cpu->prefix.vex3 = mem_eip_load24(cpu);
 				break;
-
-			// 0xB0
-			case 0xB8:	// B8 sz : mov eax imm32
-			case 0xB9:	// B9 sz : mov ecx imm32
-			case 0xBA:	// BA sz : mov edx imm32
-			case 0xBB:	// BB sz : mov ebx imm32
-			case 0xBC:	// BC sz : mov esp imm32
-			case 0xBD:	// BD sz : mov ebp imm32
-			case 0xBE:	// BE sz : mov esi imm32
-			case 0xBF:	// BF sz : mov edi imm32
-				cpu->regs[opcode & 0x07] = mem_eip_load32(cpu);
+			case 0xC5:	// VEXプリフィックス(2byte)
+				cpu->prefix.vex2 = mem_eip_load16(cpu);
 				break;
-
-			// 0xE0
-			case 0xE8:	// E8 cd sz : call rel32
-				call(cpu, mem_eip_load32(cpu));
-				break;
-
-			// not implemented opcode
 			default:
-				printf("not implemented opcode: 0x%X\n", opcode);
-				exit(1);
+				is_prefix = 0;
 			}
-		} else {
-			// 2byte opcode
-			printf("not implemented opcode: 0x%X\n", opcode);
-			exit(1);
+
+			// opcode
+			if (!is_prefix) {
+				if (opcode!=0x0F) {
+					// 1byte opcode
+
+					switch (opcode) {
+					// 0x50
+					case 0x50:	// 50 sz : push eax
+					case 0x51:	// 51 sz : push ecx
+					case 0x52:	// 52 sz : push edx
+					case 0x53:	// 53 sz : push ebx
+					case 0x54:	// 54 sz : push esp
+					case 0x55:	// 55 sz : push ebp
+					case 0x56:	// 56 sz : push esi
+					case 0x57:	// 57 sz : push edi
+						stack_push(cpu, cpu->regs[opcode & 0x07]);
+						break;
+
+					// 0x80
+					case 0x83:
+						// 83 /0 ib sz : add r/m32 imm8
+						// 83 /1 ib sz : or r/m32 imm8
+						// 83 /2 ib sz : adc r/m32 imm8
+						// 83 /3 ib sz : sbb r/m32 imm8
+						// 83 /4 ib sz : and r/m32 imm8
+						// 83 /5 ib sz : sub r/m32 imm8
+						// 83 /6 ib sz : xor r/m32 imm8
+						// 83 /7 ib sz : cmp r/m32 imm8
+						mem_eip_load_modrm(cpu);
+						switch (modrm_mod(cpu)) {
+						case 0x00:
+							printf("todo opcode 0x83 mod 0x00\n");
+							exit(1);
+							break;
+						case 0x01:
+							printf("todo opcode 0x83 mod 0x01\n");
+							exit(1);
+							break;
+						case 0x03:
+							printf("todo opcode 0x83 mod 0x03\n");
+							exit(1);
+							break;
+						case 0x04:
+							switch (modrm_reg(cpu)) {
+							case 0:
+								//cpu->regs[modrm_rm(cpu)] += mem_eip_load8(cpu);
+								opcode_add(cpu, &(cpu->regs[modrm_rm(cpu)]), 4, mem_eip_ptr(cpu, 1), 1);
+								break;
+							case 1:
+								cpu->regs[modrm_rm(cpu)] |= mem_eip_load8(cpu);
+								break;
+							case 2:
+								cpu->regs[modrm_rm(cpu)] += mem_eip_load8(cpu) + cpu_eflags(cpu, CPU_EFLAGS_CF);
+								// todo set flag: OF SF ZF AF PF
+								printf("todo opcode 0x83 mod 0x04 reg 0x02\n");
+								exit(1);
+								break;
+							case 3:
+								cpu->regs[modrm_rm(cpu)] -= mem_eip_load8(cpu) + cpu_eflags(cpu, CPU_EFLAGS_CF);
+								// todo set flag: OF SF ZF AF PF CF
+								printf("todo opcode 0x83 mod 0x04 reg 0x03\n");
+								break;
+							case 4:
+								cpu->regs[modrm_rm(cpu)] &= mem_eip_load8(cpu);
+								// todo set flag: OF CF SF ZF PF
+								printf("todo opcode 0x83 mod 0x04 reg 0x04\n");
+								break;
+							case 5:
+								cpu->regs[modrm_rm(cpu)] -= mem_eip_load8(cpu);
+								// todo set flag: OF SF ZF AF PF CF
+								printf("todo opcode 0x83 mod 0x04 reg 0x05\n");
+								break;
+							case 6:
+								cpu->regs[modrm_rm(cpu)] ^= mem_eip_load8(cpu);
+								// todo set flag: OF CF SF ZF PF
+								printf("todo opcode 0x83 mod 0x04 reg 0x06\n");
+								break;
+							case 7:
+								set_cpu_eflags(cpu, CPU_EFLAGS_ZF, cpu->regs[modrm_rm(cpu)]==mem_eip_load8(cpu) ? 1 : 0);
+								// todo set flag: CF OF SF ZF AF PF
+								printf("todo opcode 0x83 mod 0x04 reg 0x07\n");
+								break;
+							}
+							break;
+						}
+						break;
+					case 0x89:	// 89 /r sz : mov r/m32 r32
+						mem_eip_load_modrm(cpu);
+						if (is_modrm_r(cpu)) {
+							switch (modrm_mod(cpu)) {
+							case 0x00:
+								printf("todo opcode 0x89 mod 0x00\n");
+								exit(1);
+								break;
+							case 0x01:
+								printf("todo opcode 0x89 mod 0x01\n");
+								exit(1);
+								break;
+							case 0x02:
+								printf("todo opcode 0x89 mod 0x02\n");
+								exit(1);
+								break;
+							case 0x03:
+								cpu->regs[modrm_rm(cpu)] = cpu->regs[modrm_reg(cpu)];
+								break;
+							}
+						}
+						break;
+
+					// 0xB0
+					case 0xB8:	// B8 sz : mov eax imm32
+					case 0xB9:	// B9 sz : mov ecx imm32
+					case 0xBA:	// BA sz : mov edx imm32
+					case 0xBB:	// BB sz : mov ebx imm32
+					case 0xBC:	// BC sz : mov esp imm32
+					case 0xBD:	// BD sz : mov ebp imm32
+					case 0xBE:	// BE sz : mov esi imm32
+					case 0xBF:	// BF sz : mov edi imm32
+						cpu->regs[opcode & 0x07] = mem_eip_load32(cpu);
+						break;
+
+					// 0xE0
+					case 0xE8:	// E8 cd sz : call rel32
+						call(cpu, mem_eip_load32(cpu));
+						break;
+
+					// not implemented opcode
+					default:
+						printf("not implemented opcode: 0x%X\n", opcode);
+						exit(1);
+					}
+				} else {
+					// 2byte opcode
+					printf("not implemented opcode: 0x%X\n", opcode);
+					exit(1);
+				}
+			}
 		}
 	}
 }
