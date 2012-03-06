@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 typedef char int8;
 typedef short int16;
@@ -76,21 +77,11 @@ typedef struct {
 } CPUx86;
 
 
-void cpu_prefix_reset(CPUx86 *cpu)
+void cpu_current_reset(CPUx86 *cpu)
 {
-	cpu->prefix.operand_size = 0;
-	cpu->prefix.address_size = 0;
-	cpu->prefix.segment_cs = 0;
-	cpu->prefix.segment_ss = 0;
-	cpu->prefix.segment_ds = 0;
-	cpu->prefix.segment_es = 0;
-	cpu->prefix.segment_fs = 0;
-	cpu->prefix.segment_gs = 0;
-	cpu->prefix.repne = 0;
-	cpu->prefix.rep = 0;
-	cpu->prefix.rex = 0;
-	cpu->prefix.vex3 = 0;
-	cpu->prefix.vex2 = 0;
+	memset(&(cpu->prefix), 0, sizeof(cpu->prefix));
+	cpu->modrm = 0;
+	cpu->sib = 0;
 }
 
 
@@ -241,9 +232,11 @@ typedef struct {
 
 #define uintp_ptr(u)			( (u)->type==1 ? (u)->ptr.uint8p : \
 								(u)->type==2 ? (u)->ptr.uint16p : \
-								(u)->val.uint32p )
+								(u)->ptr.uint32p )
 
-#define uintp_val(u)			(*uintp_ptr(u))
+#define uintp_val(u)			( (u)->type==1 ? *((u)->ptr.uint8p) : \
+								(u)->type==2 ? *((u)->ptr.uint16p) : \
+								*((u)->ptr.uint32p) )
 
 #define set_uintp_val(u, val)	( (u)->type==1 ? (*((u)->ptr.uint8p)=val&0xFF) : \
 								(u)->type==2 ? (*((u)->ptr.uint16p)=val&0xFFFF) : \
@@ -266,39 +259,47 @@ void uintx_read(uintx *x, void *target, int len)
 	}
 }
 
-void uintp_val_copy(void *dst, int dstlen, void *src, int srclen)
+void uintp_val_copy(uintp *dstp, uintp *srcp)
+{
+	if (dstp->type==1) {
+		if (srcp->type==1) {
+			*(dstp->ptr.uint8p) = *(srcp->ptr.uint8p);
+		} else if (srcp->type==2) {
+			*(dstp->ptr.uint8p) = *(srcp->ptr.uint16p);
+		} else {
+			*(dstp->ptr.uint8p) = *(srcp->ptr.uint32p);
+		}
+	} else if (dstp->type==2) {
+		if (srcp->type==1) {
+			*(dstp->ptr.uint16p) = *(srcp->ptr.uint8p);
+		} else if (srcp->type==2) {
+			*(dstp->ptr.uint16p) = *(srcp->ptr.uint16p);
+		} else {
+			*(dstp->ptr.uint16p) = *(srcp->ptr.uint32p);
+		}
+	} else {
+		if (srcp->type==1) {
+			*(dstp->ptr.uint32p) = *(srcp->ptr.uint8p);
+		} else if (srcp->type==2) {
+			*(dstp->ptr.uint32p) = *(srcp->ptr.uint16p);
+		} else {
+			*(dstp->ptr.uint32p) = *(srcp->ptr.uint32p);
+		}
+	}
+}
+
+void voidp_val_copy(void *dst, int dstlen, void *src, int srclen)
 {
 	uintp dstp;
 	uintp srcp;
 
 	dstp.ptr.voidp = dst;
-	srcp.ptr.voidp = src;
+	dstp.type = dstlen;
 
-	if (dstlen==1) {
-		if (srclen==1) {
-			*(dstp.ptr.uint8p) = *(srcp.ptr.uint8p);
-		} else if (srclen==2) {
-			*(dstp.ptr.uint8p) = *(srcp.ptr.uint16p);
-		} else {
-			*(dstp.ptr.uint8p) = *(srcp.ptr.uint32p);
-		}
-	} else if (dstlen==2) {
-		if (srclen==1) {
-			*(dstp.ptr.uint16p) = *(srcp.ptr.uint8p);
-		} else if (srclen==2) {
-			*(dstp.ptr.uint16p) = *(srcp.ptr.uint16p);
-		} else {
-			*(dstp.ptr.uint16p) = *(srcp.ptr.uint32p);
-		}
-	} else {
-		if (srclen==1) {
-			*(dstp.ptr.uint32p) = *(srcp.ptr.uint8p);
-		} else if (srclen==2) {
-			*(dstp.ptr.uint32p) = *(srcp.ptr.uint16p);
-		} else {
-			*(dstp.ptr.uint32p) = *(srcp.ptr.uint32p);
-		}
-	}
+	srcp.ptr.voidp = src;
+	srcp.type = srclen;
+
+	uintp_val_copy(&dstp, &srcp);
 }
 
 
@@ -399,7 +400,175 @@ int is_modrm_r(CPUx86 *cpu)
 	return modrm_reg(cpu) && modrm_rm(cpu);
 }
 
-#define cpu_operand_size(cpu)	(((cpu_cr0(cpu, CR0_PE) + ((cpu)->prefix==0x66 ? 1 : 0)) % 2) ? 4 : 2)
+#define cpu_operand_size(cpu)	(((cpu_cr0(cpu, CR0_PE) + ((cpu)->prefix.operand_size ? 1 : 0)) & 1) ? 2 : 4)
+
+void* modrm_address(CPUx86 *cpu)
+{
+	int mod;
+	int reg;
+	uint32 offset;
+	void *address;
+
+	mod = modrm_mod(cpu);
+	reg = modrm_reg(cpu);
+
+	if (cpu_cr0(cpu, CR0_PE)) {
+		// プロテクトモード
+		switch (mod) {
+		case 0x00:
+			switch (reg) {
+			case 0x00:	// [EAX]
+			case 0x01:	// [ECX]
+			case 0x02:	// [EDX]
+			case 0x03:	// [EBX]
+			case 0x06:	// [ESI]
+			case 0x07:	// [EDI]
+				offset = cpu->regs[reg & 0x07];
+				break;
+			case 0x04:	// [<SIB>]
+				// todo
+				break;
+			case 0x05:	// [disp32]
+				offset = mem_eip_load32(cpu);
+				break;
+			}
+			address = &(cpu->mem[offset]);
+			break;
+		case 0x01:
+			switch (reg) {
+			case 0x00:	// [EAX + disp8]
+			case 0x01:	// [ECX + disp8]
+			case 0x02:	// [EDX + disp8]
+			case 0x03:	// [EBX + disp8]
+			case 0x05:	// [EBP + disp8]
+			case 0x06:	// [ESI + disp8]
+			case 0x07:	// [EDI + disp8]
+				offset = cpu->regs[reg & 0x07] + mem_eip_load8(cpu);
+				break;
+			case 0x04:	// [<SIB> + disp8]
+				// todo
+				break;
+			}
+			address = &(cpu->mem[offset]);
+			break;
+		case 0x02:
+			switch (reg) {
+			case 0x00:	// [EAX + disp16]
+			case 0x01:	// [ECX + disp16]
+			case 0x02:	// [EDX + disp16]
+			case 0x03:	// [EBX + disp16]
+			case 0x05:	// [EBP + disp16]
+			case 0x06:	// [ESI + disp16]
+			case 0x07:	// [EDI + disp16]
+				offset = cpu->regs[reg & 0x07] + mem_eip_load16(cpu);
+				break;
+			case 0x04:	// [<SIB> + disp16]
+				// todo
+				break;
+			}
+			address = &(cpu->mem[offset]);
+			break;
+		case 0x03:
+			address = &(cpu->regs[reg]);
+			break;
+		}
+	} else {
+		// リアルモード
+		switch (mod) {
+		case 0x00:	// [レジスタ + レジスタ]
+			switch (reg) {
+			case 0x00:	// [BX + SI]
+				offset = cpu_regist_ebx(cpu) + cpu_regist_esi(cpu);
+				break;
+			case 0x01:	// [BX + DI]
+				offset = cpu_regist_ebx(cpu) + cpu_regist_edi(cpu);
+				break;
+			case 0x02:	// [BP + SI]
+				offset = cpu_regist_ebp(cpu) + cpu_regist_esi(cpu);
+				break;
+			case 0x03:	// [BP + DI]
+				offset = cpu_regist_ebp(cpu) + cpu_regist_edi(cpu);
+				break;
+			case 0x04:	// [SI]
+				offset = cpu_regist_esi(cpu);
+				break;
+			case 0x05:	// [DI]
+				offset = cpu_regist_edi(cpu);
+				break;
+			case 0x06:	// [disp16]
+				offset = mem_eip_load16(cpu);
+				break;
+			case 0x07:	// [BX]
+				offset = cpu_regist_ebx(cpu);
+				break;
+			}
+			address = &(cpu->mem[offset & 0xFFFF]);
+			break;
+		case 0x01:	// [レジスタ + disp8]
+			switch (reg) {
+			case 0x00:	// [BX+SI + disp8]
+				offset = cpu_regist_ebx(cpu) + cpu_regist_esi(cpu) + mem_eip_load8(cpu);
+				break;
+			case 0x01:	// [BX+DI + disp8]
+				offset = cpu_regist_ebx(cpu) + cpu_regist_edi(cpu) + mem_eip_load8(cpu);
+				break;
+			case 0x02:	// [BP+SI + disp8]
+				offset = cpu_regist_ebp(cpu) + cpu_regist_esi(cpu) + mem_eip_load8(cpu);
+				break;
+			case 0x03:	// [BP+DI + disp8]
+				offset = cpu_regist_ebp(cpu) + cpu_regist_edi(cpu) + mem_eip_load8(cpu);
+				break;
+			case 0x04:	// [SI + disp8]
+				offset = cpu_regist_esi(cpu) + mem_eip_load8(cpu);
+				break;
+			case 0x05:	// [DI + disp8]
+				offset = cpu_regist_edi(cpu) + mem_eip_load8(cpu);
+				break;
+			case 0x06:	// [BP + disp8]
+				offset = cpu_regist_ebp(cpu) + mem_eip_load8(cpu);
+				break;
+			case 0x07:	// [BX + disp8]
+				offset = cpu_regist_ebx(cpu) + mem_eip_load8(cpu);
+				break;
+			}
+			address = &(cpu->mem[offset & 0xFFFF]);
+			break;
+		case 0x02:	// [レジスタ + disp16]
+			switch (reg) {
+			case 0x00:	// [BX+SI + disp16]
+				offset = cpu_regist_ebx(cpu) + cpu_regist_esi(cpu) + mem_eip_load16(cpu);
+				break;
+			case 0x01:	// [BX+DI + disp16]
+				offset = cpu_regist_ebx(cpu) + cpu_regist_edi(cpu) + mem_eip_load16(cpu);
+				break;
+			case 0x02:	// [BP+SI + disp16]
+				offset = cpu_regist_ebp(cpu) + cpu_regist_esi(cpu) + mem_eip_load16(cpu);
+				break;
+			case 0x03:	// [BP+DI + disp16]
+				offset = cpu_regist_ebp(cpu) + cpu_regist_edi(cpu) + mem_eip_load16(cpu);
+				break;
+			case 0x04:	// [SI + disp16]
+				offset = cpu_regist_esi(cpu) + mem_eip_load16(cpu);
+				break;
+			case 0x05:	// [DI + disp16]
+				offset = cpu_regist_edi(cpu) + mem_eip_load16(cpu);
+				break;
+			case 0x06:	// [BP + disp16]
+				offset = cpu_regist_ebp(cpu) + mem_eip_load16(cpu);
+				break;
+			case 0x07:	// [BX + disp16]
+				offset = cpu_regist_ebx(cpu) + mem_eip_load16(cpu);
+				break;
+			}
+			address = &(cpu->mem[offset & 0xFFFF]);
+			break;
+		case 0x03:	// レジスタ
+			address = &(cpu->regs[reg]);
+			break;
+		}
+	}
+	return address;
+}
 
 
 // stack
@@ -433,15 +602,45 @@ void ret(CPUx86 *cpu, uint32 val)
 
 void opcode_add(CPUx86 *cpu, void *dst, int dstlen, void *src, int srclen)
 {
-	uintx dstx;
-	uintx srcx;
+	uintp dstp;
+	uintp srcp;
 
-	uintx_read(&dstx, dst, dstlen);
-	uintx_read(&srcx, src, srclen);
+	dstp.ptr.voidp = dst;
+	dstp.type = dstlen;
 
-	set_uintx_val(&dstx, uintx_val(&dstx) + uintx_val(&srcx));
+	srcp.ptr.voidp = src;
+	srcp.type = srclen;
+
+	set_uintp_val(&dstp, uintp_val(&dstp) + uintp_val(&srcp));
 }
 
+void opcode_or(CPUx86 *cpu, void *dst, int dstlen, void *src, int srclen)
+{
+	uintp dstp;
+	uintp srcp;
+
+	dstp.ptr.voidp = dst;
+	dstp.type = dstlen;
+
+	srcp.ptr.voidp = src;
+	srcp.type = srclen;
+
+	set_uintp_val(&dstp, uintp_val(&dstp) | uintp_val(&srcp));
+}
+
+void opcode_sub(CPUx86 *cpu, void *dst, int dstlen, void *src, int srclen)
+{
+	uintp dstp;
+	uintp srcp;
+
+	dstp.ptr.voidp = dst;
+	dstp.type = dstlen;
+
+	srcp.ptr.voidp = src;
+	srcp.type = srclen;
+
+	set_uintp_val(&dstp, uintp_val(&dstp) - uintp_val(&srcp));
+}
 
 // dump
 
@@ -503,11 +702,12 @@ void exec_cpux86(CPUx86 *cpu)
 	int c=0;
 	int i;
 	int is_prefix;
+	uintp p;
 
 	while (c++<20) {
 		dump_cpu(cpu);
 
-		cpu_prefix_reset(cpu);
+		cpu_current_reset(cpu);
 		is_prefix = 1;
 
 		while (is_prefix) {
@@ -606,25 +806,37 @@ void exec_cpux86(CPUx86 *cpu)
 						mem_eip_load_modrm(cpu);
 						switch (modrm_mod(cpu)) {
 						case 0x00:
-							printf("todo opcode 0x83 mod 0x00\n");
+							printf("todo opcode 0x83 mod 0x00 reg 0x%X\n", modrm_reg(cpu));
 							exit(1);
 							break;
 						case 0x01:
-							printf("todo opcode 0x83 mod 0x01\n");
+							printf("todo opcode 0x83 mod 0x01 reg 0x%X\n", modrm_reg(cpu));
 							exit(1);
 							break;
-						case 0x03:
-							printf("todo opcode 0x83 mod 0x03\n");
-							exit(1);
+						case 0x03:	// レジスタ+disp16
+							//printf("todo opcode 0x83 mod 0x03 reg 0x%X\n", modrm_reg(cpu));
+							//exit(1);
+							switch (modrm_reg(cpu)) {
+							case 5:
+								//printf("rm: %d\n", modrm_rm(cpu));
+								//p.ptr.voidp = &(cpu->mem[cpu->regs[modrm_rm(cpu)]]);
+								//p.ptr.uint16p += mem_eip_load16(cpu);
+								opcode_sub(cpu, modrm_address(cpu), cpu_operand_size(cpu), mem_eip_ptr(cpu, 1), 1);
+								break;
+							default:
+								printf("tod opcode 0x83\n");
+								exit(0);
+							}
 							break;
-						case 0x04:
+						case 0x04:	// レジスタ
 							switch (modrm_reg(cpu)) {
 							case 0:
 								//cpu->regs[modrm_rm(cpu)] += mem_eip_load8(cpu);
-								opcode_add(cpu, &(cpu->regs[modrm_rm(cpu)]), 4, mem_eip_ptr(cpu, 1), 1);
+								opcode_add(cpu, &(cpu->regs[modrm_rm(cpu)]), cpu_operand_size(cpu), mem_eip_ptr(cpu, 1), 1);
 								break;
 							case 1:
-								cpu->regs[modrm_rm(cpu)] |= mem_eip_load8(cpu);
+								//cpu->regs[modrm_rm(cpu)] |= mem_eip_load8(cpu);
+								opcode_or(cpu, &(cpu->regs[modrm_rm(cpu)]), cpu_operand_size(cpu), mem_eip_ptr(cpu, 1), 1);
 								break;
 							case 2:
 								cpu->regs[modrm_rm(cpu)] += mem_eip_load8(cpu) + cpu_eflags(cpu, CPU_EFLAGS_CF);
