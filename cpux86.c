@@ -405,25 +405,25 @@ int is_modrm_r(CPUx86 *cpu)
 void* modrm_address(CPUx86 *cpu)
 {
 	int mod;
-	int reg;
+	int rm;
 	uint32 offset;
 	void *address;
 
 	mod = modrm_mod(cpu);
-	reg = modrm_reg(cpu);
+	rm = modrm_rm(cpu);
 
 	if (cpu_cr0(cpu, CR0_PE)) {
 		// プロテクトモード
 		switch (mod) {
 		case 0x00:
-			switch (reg) {
+			switch (rm) {
 			case 0x00:	// [EAX]
 			case 0x01:	// [ECX]
 			case 0x02:	// [EDX]
 			case 0x03:	// [EBX]
 			case 0x06:	// [ESI]
 			case 0x07:	// [EDI]
-				offset = cpu->regs[reg & 0x07];
+				offset = cpu->regs[rm & 0x07];
 				break;
 			case 0x04:	// [<SIB>]
 				// todo
@@ -435,7 +435,7 @@ void* modrm_address(CPUx86 *cpu)
 			address = &(cpu->mem[offset]);
 			break;
 		case 0x01:
-			switch (reg) {
+			switch (rm) {
 			case 0x00:	// [EAX + disp8]
 			case 0x01:	// [ECX + disp8]
 			case 0x02:	// [EDX + disp8]
@@ -443,7 +443,7 @@ void* modrm_address(CPUx86 *cpu)
 			case 0x05:	// [EBP + disp8]
 			case 0x06:	// [ESI + disp8]
 			case 0x07:	// [EDI + disp8]
-				offset = cpu->regs[reg & 0x07] + mem_eip_load8(cpu);
+				offset = cpu->regs[rm & 0x07] + mem_eip_load8(cpu);
 				break;
 			case 0x04:	// [<SIB> + disp8]
 				// todo
@@ -452,7 +452,7 @@ void* modrm_address(CPUx86 *cpu)
 			address = &(cpu->mem[offset]);
 			break;
 		case 0x02:
-			switch (reg) {
+			switch (rm) {
 			case 0x00:	// [EAX + disp16]
 			case 0x01:	// [ECX + disp16]
 			case 0x02:	// [EDX + disp16]
@@ -460,7 +460,7 @@ void* modrm_address(CPUx86 *cpu)
 			case 0x05:	// [EBP + disp16]
 			case 0x06:	// [ESI + disp16]
 			case 0x07:	// [EDI + disp16]
-				offset = cpu->regs[reg & 0x07] + mem_eip_load16(cpu);
+				offset = cpu->regs[rm & 0x07] + mem_eip_load16(cpu);
 				break;
 			case 0x04:	// [<SIB> + disp16]
 				// todo
@@ -469,14 +469,14 @@ void* modrm_address(CPUx86 *cpu)
 			address = &(cpu->mem[offset]);
 			break;
 		case 0x03:
-			address = &(cpu->regs[reg]);
+			address = &(cpu->regs[rm]);
 			break;
 		}
 	} else {
 		// リアルモード
 		switch (mod) {
 		case 0x00:	// [レジスタ + レジスタ]
-			switch (reg) {
+			switch (rm) {
 			case 0x00:	// [BX + SI]
 				offset = cpu_regist_ebx(cpu) + cpu_regist_esi(cpu);
 				break;
@@ -505,7 +505,7 @@ void* modrm_address(CPUx86 *cpu)
 			address = &(cpu->mem[offset & 0xFFFF]);
 			break;
 		case 0x01:	// [レジスタ + disp8]
-			switch (reg) {
+			switch (rm) {
 			case 0x00:	// [BX+SI + disp8]
 				offset = cpu_regist_ebx(cpu) + cpu_regist_esi(cpu) + mem_eip_load8(cpu);
 				break;
@@ -534,7 +534,7 @@ void* modrm_address(CPUx86 *cpu)
 			address = &(cpu->mem[offset & 0xFFFF]);
 			break;
 		case 0x02:	// [レジスタ + disp16]
-			switch (reg) {
+			switch (rm) {
 			case 0x00:	// [BX+SI + disp16]
 				offset = cpu_regist_ebx(cpu) + cpu_regist_esi(cpu) + mem_eip_load16(cpu);
 				break;
@@ -563,7 +563,7 @@ void* modrm_address(CPUx86 *cpu)
 			address = &(cpu->mem[offset & 0xFFFF]);
 			break;
 		case 0x03:	// レジスタ
-			address = &(cpu->regs[reg]);
+			address = &(cpu->regs[rm]);
 			break;
 		}
 	}
