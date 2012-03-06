@@ -150,7 +150,7 @@ typedef struct {
 
 typedef struct {
 	uint16 limitL;
-	uint8 baseL;
+	uint16 baseL;
 	uint8 baseM;
 	uint8 type;
 	uint8 limitH;
@@ -182,11 +182,14 @@ typedef struct {
 	unsigned char type;
 } uintx;
 
-typedef union {
-	void *voidp;
-	uint8 *uint8p;
-	uint16 *uint16p;
-	uint32 *uint32p;
+typedef struct {
+	union {
+		void *voidp;
+		uint8 *uint8p;
+		uint16 *uint16p;
+		uint32 *uint32p;
+	} ptr;
+	unsigned char type;
 } uintp;
 
 #define UINTX_INT8		1
@@ -200,12 +203,19 @@ typedef union {
 						(u)->type==2 ? (u)->val.uint16 : \
 						(u)->val.uint32 )
 
-#define set_uintx_val(u, _val, _type)	{(_type)==1 ? ((u)->val.uint8=(_val)&0xFF) : \
-										(_type)==2 ? ((u)->val.uint16=(_val)&0xFFFF) : \
-										((u)->val.uint32=(_val)&0xFFFFFFFF); \
-										(u)->type=_type;}
+#define set_uintx_val(u, _val)	( (u)->type==1 ? ((u)->val.uint8=(_val)&0xFF) : \
+								(u)->type==2 ? ((u)->val.uint16=(_val)&0xFFFF) : \
+								((u)->val.uint32=(_val)&0xFFFFFFFF) )
 
-#define update_uintx_val(u, val)	set_uintx_val((u), (val), (u)->type)
+#define uintp_ptr(u)			( (u)->type==1 ? (u)->ptr.uint8p : \
+								(u)->type==2 ? (u)->ptr.uint16p : \
+								(u)->val.uint32p )
+
+#define uintp_val(u)			(*uintp_ptr(u))
+
+#define set_uintp_val(u, val)	( (u)->type==1 ? (*((u)->ptr.uint8p)=val&0xFF) : \
+								(u)->type==2 ? (*((u)->ptr.uint16p)=val&0xFFFF) : \
+								(*((u)->ptr.uint32p)=val&0xFFFFFFFF) )
 
 
 // memory
@@ -326,54 +336,54 @@ void ret(CPUx86 *cpu, uint32 val)
 
 // opcode
 
-void uintxload(uintx *x, void *target, int len)
+void uintx_load(uintx *x, void *target, int len)
 {
 	uintp targetp;
-	targetp.voidp = target;
+	targetp.ptr.voidp = target;
 
 	if (len==1) {
-		x->val.uint8 = *(targetp.uint8p);
+		x->val.uint8 = *(targetp.ptr.uint8p);
 		x->type = 1;
 	} else if (len==2) {
-		x->val.uint16 = *(targetp.uint16p);
+		x->val.uint16 = *(targetp.ptr.uint16p);
 		x->type = 2;
 	} else {
-		x->val.uint32 = *(targetp.uint32p);
+		x->val.uint32 = *(targetp.ptr.uint32p);
 		x->type = 4;
 	}
 }
 
-void uintpcopy(void *dst, int dstlen, void *src, int srclen)
+void uintp_val_copy(void *dst, int dstlen, void *src, int srclen)
 {
 	uintp dstp;
 	uintp srcp;
 
-	dstp.voidp = dst;
-	srcp.voidp = src;
+	dstp.ptr.voidp = dst;
+	srcp.ptr.voidp = src;
 
 	if (dstlen==1) {
 		if (srclen==1) {
-			*(dstp.uint8p) = *(srcp.uint8p);
+			*(dstp.ptr.uint8p) = *(srcp.ptr.uint8p);
 		} else if (srclen==2) {
-			*(dstp.uint8p) = *(srcp.uint16p);
+			*(dstp.ptr.uint8p) = *(srcp.ptr.uint16p);
 		} else {
-			*(dstp.uint8p) = *(srcp.uint32p);
+			*(dstp.ptr.uint8p) = *(srcp.ptr.uint32p);
 		}
 	} else if (dstlen==2) {
 		if (srclen==1) {
-			*(dstp.uint16p) = *(srcp.uint8p);
+			*(dstp.ptr.uint16p) = *(srcp.ptr.uint8p);
 		} else if (srclen==2) {
-			*(dstp.uint16p) = *(srcp.uint16p);
+			*(dstp.ptr.uint16p) = *(srcp.ptr.uint16p);
 		} else {
-			*(dstp.uint16p) = *(srcp.uint32p);
+			*(dstp.ptr.uint16p) = *(srcp.ptr.uint32p);
 		}
 	} else {
 		if (srclen==1) {
-			*(dstp.uint32p) = *(srcp.uint8p);
+			*(dstp.ptr.uint32p) = *(srcp.ptr.uint8p);
 		} else if (srclen==2) {
-			*(dstp.uint32p) = *(srcp.uint16p);
+			*(dstp.ptr.uint32p) = *(srcp.ptr.uint16p);
 		} else {
-			*(dstp.uint32p) = *(srcp.uint32p);
+			*(dstp.ptr.uint32p) = *(srcp.ptr.uint32p);
 		}
 	}
 }
@@ -383,12 +393,10 @@ void opcode_add(CPUx86 *cpu, void *dst, int dstlen, void *src, int srclen)
 	uintx dstx;
 	uintx srcx;
 
-	uintxload(&dstx, dst, dstlen);
-	uintxload(&srcx, src, srclen);
+	uintx_load(&dstx, dst, dstlen);
+	uintx_load(&srcx, src, srclen);
 
-	update_uintx_val(&dstx, uintx_val(&dstx) + uintx_val(&srcx));
-	//printf("val: %d\n", uintx_val(&dstx));
-	//update_uintx_val(&dstx, dstx.val.uint32 + srcx.val.uint32);
+	set_uintx_val(&dstx, uintx_val(&dstx) + uintx_val(&srcx));
 }
 
 
