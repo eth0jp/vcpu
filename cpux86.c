@@ -628,6 +628,8 @@ void opcode_add(CPUx86 *cpu, void *dst, int dstlen, void *src, int srclen)
 	srcp.type = srclen;
 
 	set_uintp_val(&dstp, uintp_val(&dstp) + uintp_val(&srcp));
+
+	// todo set flag: OF SF ZF AF PF
 }
 
 void opcode_or(CPUx86 *cpu, void *dst, int dstlen, void *src, int srclen)
@@ -642,6 +644,24 @@ void opcode_or(CPUx86 *cpu, void *dst, int dstlen, void *src, int srclen)
 	srcp.type = srclen;
 
 	set_uintp_val(&dstp, uintp_val(&dstp) | uintp_val(&srcp));
+
+	// todo set flag: OF CF SF ZF PF
+}
+
+void opcode_and(CPUx86 *cpu, void *dst, int dstlen, void *src, int srclen)
+{
+	uintp dstp;
+	uintp srcp;
+
+	dstp.ptr.voidp = dst;
+	dstp.type = dstlen;
+
+	srcp.ptr.voidp = src;
+	srcp.type = srclen;
+
+	set_uintp_val(&dstp, uintp_val(&dstp) & uintp_val(&srcp));
+
+	// todo set flag: OF CF SF ZF PF
 }
 
 void opcode_sub(CPUx86 *cpu, void *dst, int dstlen, void *src, int srclen)
@@ -656,6 +676,24 @@ void opcode_sub(CPUx86 *cpu, void *dst, int dstlen, void *src, int srclen)
 	srcp.type = srclen;
 
 	set_uintp_val(&dstp, uintp_val(&dstp) - uintp_val(&srcp));
+
+	// todo set flag: OF SF ZF AF PF CF
+}
+
+void opcode_xor(CPUx86 *cpu, void *dst, int dstlen, void *src, int srclen)
+{
+	uintp dstp;
+	uintp srcp;
+
+	dstp.ptr.voidp = dst;
+	dstp.type = dstlen;
+
+	srcp.ptr.voidp = src;
+	srcp.type = srclen;
+
+	set_uintp_val(&dstp, uintp_val(&dstp) ^ uintp_val(&srcp));
+
+	// todo set flag: OF CF SF ZF PF
 }
 
 
@@ -719,7 +757,6 @@ void exec_cpux86(CPUx86 *cpu)
 	int c=0;
 	int i;
 	int is_prefix;
-	uintp p;
 
 	while (c++<20) {
 		dump_cpu(cpu);
@@ -831,35 +868,26 @@ void exec_cpux86(CPUx86 *cpu)
 							exit(1);
 							break;
 						case 0x03:	// レジスタ+disp16
-							//printf("todo opcode 0x83 mod 0x03 reg 0x%X\n", cpu_modrm_reg(cpu));
-							//exit(1);
 							switch (cpu_modrm_reg(cpu)) {
 							case 5:
-								//printf("rm: %d\n", modrm_rm(cpu));
-								//p.ptr.voidp = &(cpu->mem[cpu->regs[cpu_modrm_rm(cpu)]]);
-								//p.ptr.uint16p += mem_eip_load16(cpu);
 								opcode_sub(cpu, cpu_modrm_address(cpu), cpu_operand_size(cpu), mem_eip_ptr(cpu, 1), 1);
 								break;
 							default:
-								printf("tod opcode 0x83\n");
+								printf("todo opcode 0x83\n");
 								exit(0);
 							}
 							break;
 						case 0x04:	// レジスタ
 							switch (cpu_modrm_reg(cpu)) {
 							case 0:
-								// todo set flag: OF SF ZF AF PF
 								opcode_add(cpu, &(cpu->regs[cpu_modrm_rm(cpu)]), cpu_operand_size(cpu), mem_eip_ptr(cpu, 1), 1);
 								break;
 							case 1:
-								// todo set flag: OF CF SF ZF PF
 								opcode_or(cpu, &(cpu->regs[cpu_modrm_rm(cpu)]), cpu_operand_size(cpu), mem_eip_ptr(cpu, 1), 1);
 								break;
 							case 2:
-								// todo set flag: OF SF ZF AF PF
 								cpu->regs[cpu_modrm_rm(cpu)] += mem_eip_load8(cpu) + cpu_eflags(cpu, CPU_EFLAGS_CF);
-								printf("todo opcode 0x83 mod 0x04 reg 0x02\n");
-								exit(1);
+								// todo set flag: OF SF ZF AF PF
 								break;
 							case 3:
 								cpu->regs[cpu_modrm_rm(cpu)] -= mem_eip_load8(cpu) + cpu_eflags(cpu, CPU_EFLAGS_CF);
@@ -867,18 +895,15 @@ void exec_cpux86(CPUx86 *cpu)
 								printf("todo opcode 0x83 mod 0x04 reg 0x03\n");
 								break;
 							case 4:
-								cpu->regs[cpu_modrm_rm(cpu)] &= mem_eip_load8(cpu);
-								// todo set flag: OF CF SF ZF PF
+								opcode_and(cpu, &(cpu->regs[cpu_modrm_rm(cpu)]), cpu_operand_size(cpu), mem_eip_ptr(cpu, 1), 1);
 								printf("todo opcode 0x83 mod 0x04 reg 0x04\n");
 								break;
 							case 5:
-								cpu->regs[cpu_modrm_rm(cpu)] -= mem_eip_load8(cpu);
-								// todo set flag: OF SF ZF AF PF CF
+								opcode_sub(cpu, &(cpu->regs[cpu_modrm_rm(cpu)]), cpu_operand_size(cpu), mem_eip_ptr(cpu, 1), 1);
 								printf("todo opcode 0x83 mod 0x04 reg 0x05\n");
 								break;
 							case 6:
-								cpu->regs[cpu_modrm_rm(cpu)] ^= mem_eip_load8(cpu);
-								// todo set flag: OF CF SF ZF PF
+								opcode_xor(cpu, &(cpu->regs[cpu_modrm_rm(cpu)]), cpu_operand_size(cpu), mem_eip_ptr(cpu, 1), 1);
 								printf("todo opcode 0x83 mod 0x04 reg 0x06\n");
 								break;
 							case 7:
