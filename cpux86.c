@@ -101,6 +101,15 @@ void cpu_current_reset(CPUx86 *cpu)
 #define cpu_regist_esi(cpu)	cpu->regs[6]
 #define cpu_regist_edi(cpu)	cpu->regs[7]
 
+#define cpu_regist_ax(cpu)	(cpu->regs[0] & 0xFFFF)
+#define cpu_regist_cx(cpu)	(cpu->regs[1] & 0xFFFF)
+#define cpu_regist_dx(cpu)	(cpu->regs[2] & 0xFFFF)
+#define cpu_regist_bx(cpu)	(cpu->regs[3] & 0xFFFF)
+#define cpu_regist_sp(cpu)	(cpu->regs[4] & 0xFFFF)
+#define cpu_regist_bp(cpu)	(cpu->regs[5] & 0xFFFF)
+#define cpu_regist_si(cpu)	(cpu->regs[6] & 0xFFFF)
+#define cpu_regist_di(cpu)	(cpu->regs[7] & 0xFFFF)
+
 
 // EFLAGS
 
@@ -203,66 +212,41 @@ typedef struct {
 
 typedef struct {
 	union {
-		uint8 uint8;
-		uint16 uint16;
-		uint32 uint32;
-	} val;
-	unsigned char type;
-} uintx;
-
-typedef struct {
-	union {
 		void *voidp;
 		uint8 *uint8p;
 		uint16 *uint16p;
 		uint32 *uint32p;
 	} ptr;
-	unsigned char type;
+	// 1 => uint8
+	// -1 => uint8 符号拡張あり
+	// 2 => uint16
+	// 4 => uint32
+	char type;
 } uintp;
 
 #define UINTX_INT8		1
 #define UINTX_UINT8		1
+#define UINTX_INT8_SE	-1
+#define UINTX_UINT8_SE	-1
 #define UINTX_INT16		2
 #define UINTX_UINT16	2
 #define UINTX_INT32		4
 #define UINTX_UINT32	4
 
-#define uintx_val(u)	( (u)->type==1 ? (u)->val.uint8 : \
-						(u)->type==2 ? (u)->val.uint16 : \
-						(u)->val.uint32 )
-
-#define set_uintx_val(u, _val)	( (u)->type==1 ? ((u)->val.uint8=(_val)&0xFF) : \
-								(u)->type==2 ? ((u)->val.uint16=(_val)&0xFFFF) : \
-								((u)->val.uint32=(_val)&0xFFFFFFFF) )
-
 #define uintp_ptr(u)			( (u)->type==1 ? (u)->ptr.uint8p : \
+								(u)->type==-1 ? (u)->ptr.uint8p : \
 								(u)->type==2 ? (u)->ptr.uint16p : \
 								(u)->ptr.uint32p )
 
 #define uintp_val(u)			( (u)->type==1 ? *((u)->ptr.uint8p) : \
+								(u)->type==-1 ? (*((u)->ptr.uint8p)&0xF0 ? *((u)->ptr.uint8p)|0xFFFFFF00 : *((u)->ptr.uint8p)) : \
 								(u)->type==2 ? *((u)->ptr.uint16p) : \
 								*((u)->ptr.uint32p) )
 
-#define set_uintp_val(u, val)	( (u)->type==1 ? (*((u)->ptr.uint8p)=val&0xFF) : \
-								(u)->type==2 ? (*((u)->ptr.uint16p)=val&0xFFFF) : \
-								(*((u)->ptr.uint32p)=val&0xFFFFFFFF) )
-
-void uintx_read(uintx *x, void *target, int len)
-{
-	uintp targetp;
-	targetp.ptr.voidp = target;
-
-	if (len==1) {
-		x->val.uint8 = *(targetp.ptr.uint8p);
-		x->type = 1;
-	} else if (len==2) {
-		x->val.uint16 = *(targetp.ptr.uint16p);
-		x->type = 2;
-	} else {
-		x->val.uint32 = *(targetp.ptr.uint32p);
-		x->type = 4;
-	}
-}
+#define set_uintp_val(u, val)	( (u)->type==1 ? (*((u)->ptr.uint8p)=((val)&0xFF)) : \
+								(u)->type==-1 ? (*((u)->ptr.uint8p)=((val)&0xFF)) : \
+								(u)->type==2 ? (*((u)->ptr.uint16p)=((val)&0xFFFF)) : \
+								(*((u)->ptr.uint32p)=((val)&0xFFFFFFFF)) )
 
 void uintp_val_copy(uintp *dstp, uintp *srcp)
 {
@@ -310,15 +294,27 @@ void voidp_val_copy(void *dst, int dstlen, void *src, int srclen)
 
 // memory
 
-#define mem_store8(cpu, idx, value)		((uint8*)cpu->mem)[(idx)] = (value)&0xFF;
-#define mem_store_file(cpu, idx, fname)	{FILE *fp = fopen(fname, "rb"); mem_store_fp(cpu, idx, fp); fclose(fp);}
-#define mem_store_fp(cpu, idx, fp)		{uint32 tidx=idx; uint32 tmp; while((tmp=fgetc(fp))!=EOF) {mem_store8(cpu, tidx++, tmp);}}
+#define mem_store8(cpu, idx, value)		(cpu)->mem[(idx)] = ((value)&0xFF)
+#define mem_store_file(cpu, idx, fname)	{FILE *fp = fopen(fname, "rb"); mem_store_fp((cpu), (idx), fp); fclose(fp);}
+#define mem_store_fp(cpu, idx, fp)		{uint32 tidx=(idx); int tmp; while((tmp=fgetc(fp))!=EOF) {mem_store8(cpu, tidx++, tmp);}}
 
 uint8 mem_eip_load8(CPUx86 *cpu)
 {
 	uint8 val = cpu->mem[cpu->eip];
 	cpu->eip += 1;
 	return val;
+}
+
+uint16 mem_eip_load8_se(CPUx86 *cpu)
+{
+	uint8 val8 = mem_eip_load8(cpu);
+	uint16 val16;
+	if (val8 & 0x80) {
+		val16 = val8 | 0xFF00;
+	} else {
+		val16 = val8 & 0x00FF;
+	}
+	return val16;
 }
 
 uint16 mem_eip_load16(CPUx86 *cpu)
@@ -377,7 +373,7 @@ uint32 seg_ss(CPUx86 *cpu)
 void mem_eip_load_modrm(CPUx86 *cpu)
 {
 	cpu->modrm = mem_eip_load8(cpu);
-	if (cpu->modrm&0xC0!=0xC0 && cpu->modrm&38==0x20) {
+	if ((cpu->modrm&0xC0)!=0xC0 && (cpu->modrm&38)==0x20) {
 		cpu->sib = mem_eip_load8(cpu);
 	} else {
 		cpu->sib = 0;
@@ -443,7 +439,7 @@ void* cpu_modrm_address(CPUx86 *cpu)
 			case 0x03:	// [EBX]
 			case 0x06:	// [ESI]
 			case 0x07:	// [EDI]
-				offset = cpu->regs[rm & 0x07];
+				offset = cpu->regs[rm];
 				break;
 			case 0x04:	// [<SIB>]
 				// todo
@@ -463,7 +459,7 @@ void* cpu_modrm_address(CPUx86 *cpu)
 			case 0x05:	// [EBP + disp8]
 			case 0x06:	// [ESI + disp8]
 			case 0x07:	// [EDI + disp8]
-				offset = cpu->regs[rm & 0x07] + mem_eip_load8(cpu);
+				offset = cpu->regs[rm] + mem_eip_load8_se(cpu);
 				break;
 			case 0x04:	// [<SIB> + disp8]
 				// todo
@@ -480,7 +476,7 @@ void* cpu_modrm_address(CPUx86 *cpu)
 			case 0x05:	// [EBP + disp16]
 			case 0x06:	// [ESI + disp16]
 			case 0x07:	// [EDI + disp16]
-				offset = cpu->regs[rm & 0x07] + mem_eip_load16(cpu);
+				offset = cpu->regs[rm] + mem_eip_load16(cpu);
 				break;
 			case 0x04:	// [<SIB> + disp16]
 				// todo
@@ -498,86 +494,87 @@ void* cpu_modrm_address(CPUx86 *cpu)
 		case 0x00:	// [レジスタ + レジスタ]
 			switch (rm) {
 			case 0x00:	// [BX + SI]
-				offset = cpu_regist_ebx(cpu) + cpu_regist_esi(cpu);
+				offset = cpu_regist_bx(cpu) + cpu_regist_si(cpu);
 				break;
 			case 0x01:	// [BX + DI]
-				offset = cpu_regist_ebx(cpu) + cpu_regist_edi(cpu);
+				offset = cpu_regist_bx(cpu) + cpu_regist_di(cpu);
 				break;
 			case 0x02:	// [BP + SI]
-				offset = cpu_regist_ebp(cpu) + cpu_regist_esi(cpu);
+				offset = cpu_regist_bp(cpu) + cpu_regist_si(cpu);
 				break;
 			case 0x03:	// [BP + DI]
-				offset = cpu_regist_ebp(cpu) + cpu_regist_edi(cpu);
+				offset = cpu_regist_bp(cpu) + cpu_regist_di(cpu);
 				break;
 			case 0x04:	// [SI]
-				offset = cpu_regist_esi(cpu);
+				offset = cpu_regist_si(cpu);
 				break;
 			case 0x05:	// [DI]
-				offset = cpu_regist_edi(cpu);
+				offset = cpu_regist_di(cpu);
 				break;
 			case 0x06:	// [disp16]
 				offset = mem_eip_load16(cpu);
 				break;
 			case 0x07:	// [BX]
-				offset = cpu_regist_ebx(cpu);
+				offset = cpu_regist_bx(cpu);
 				break;
 			}
 			address = &(cpu->mem[offset & 0xFFFF]);
 			break;
 		case 0x01:	// [レジスタ + disp8]
 			switch (rm) {
-			case 0x00:	// [BX+SI + disp8]
-				offset = cpu_regist_ebx(cpu) + cpu_regist_esi(cpu) + mem_eip_load8(cpu);
+			case 0x00:	// [BX + SI + disp8]
+				offset = cpu_regist_bx(cpu) + cpu_regist_si(cpu) + mem_eip_load8_se(cpu);
 				break;
-			case 0x01:	// [BX+DI + disp8]
-				offset = cpu_regist_ebx(cpu) + cpu_regist_edi(cpu) + mem_eip_load8(cpu);
+			case 0x01:	// [BX + DI + disp8]
+				offset = cpu_regist_bx(cpu) + cpu_regist_di(cpu) + mem_eip_load8_se(cpu);
 				break;
-			case 0x02:	// [BP+SI + disp8]
-				offset = cpu_regist_ebp(cpu) + cpu_regist_esi(cpu) + mem_eip_load8(cpu);
+			case 0x02:	// [BP + SI + disp8]
+				offset = cpu_regist_bp(cpu) + cpu_regist_si(cpu) + mem_eip_load8_se(cpu);
 				break;
-			case 0x03:	// [BP+DI + disp8]
-				offset = cpu_regist_ebp(cpu) + cpu_regist_edi(cpu) + mem_eip_load8(cpu);
+			case 0x03:	// [BP + DI + disp8]
+				offset = cpu_regist_bp(cpu) + cpu_regist_di(cpu) + mem_eip_load8_se(cpu);
 				break;
 			case 0x04:	// [SI + disp8]
-				offset = cpu_regist_esi(cpu) + mem_eip_load8(cpu);
+				offset = cpu_regist_si(cpu) + mem_eip_load8_se(cpu);
 				break;
 			case 0x05:	// [DI + disp8]
-				offset = cpu_regist_edi(cpu) + mem_eip_load8(cpu);
+				offset = cpu_regist_di(cpu) + mem_eip_load8_se(cpu);
 				break;
 			case 0x06:	// [BP + disp8]
-				offset = cpu_regist_ebp(cpu) + mem_eip_load8(cpu);
+				offset = cpu_regist_bp(cpu) + mem_eip_load8_se(cpu);
 				break;
 			case 0x07:	// [BX + disp8]
-				offset = cpu_regist_ebx(cpu) + mem_eip_load8(cpu);
+				offset = cpu_regist_bx(cpu) + mem_eip_load8_se(cpu);
 				break;
 			}
+printf("offset: %x\n", offset&0xFFFF);
 			address = &(cpu->mem[offset & 0xFFFF]);
 			break;
 		case 0x02:	// [レジスタ + disp16]
 			switch (rm) {
-			case 0x00:	// [BX+SI + disp16]
-				offset = cpu_regist_ebx(cpu) + cpu_regist_esi(cpu) + mem_eip_load16(cpu);
+			case 0x00:	// [BX + SI + disp16]
+				offset = cpu_regist_bx(cpu) + cpu_regist_si(cpu) + mem_eip_load16(cpu);
 				break;
-			case 0x01:	// [BX+DI + disp16]
-				offset = cpu_regist_ebx(cpu) + cpu_regist_edi(cpu) + mem_eip_load16(cpu);
+			case 0x01:	// [BX + DI + disp16]
+				offset = cpu_regist_bx(cpu) + cpu_regist_di(cpu) + mem_eip_load16(cpu);
 				break;
-			case 0x02:	// [BP+SI + disp16]
-				offset = cpu_regist_ebp(cpu) + cpu_regist_esi(cpu) + mem_eip_load16(cpu);
+			case 0x02:	// [BP + SI + disp16]
+				offset = cpu_regist_bp(cpu) + cpu_regist_si(cpu) + mem_eip_load16(cpu);
 				break;
-			case 0x03:	// [BP+DI + disp16]
-				offset = cpu_regist_ebp(cpu) + cpu_regist_edi(cpu) + mem_eip_load16(cpu);
+			case 0x03:	// [BP + DI + disp16]
+				offset = cpu_regist_bp(cpu) + cpu_regist_di(cpu) + mem_eip_load16(cpu);
 				break;
 			case 0x04:	// [SI + disp16]
-				offset = cpu_regist_esi(cpu) + mem_eip_load16(cpu);
+				offset = cpu_regist_si(cpu) + mem_eip_load16(cpu);
 				break;
 			case 0x05:	// [DI + disp16]
-				offset = cpu_regist_edi(cpu) + mem_eip_load16(cpu);
+				offset = cpu_regist_di(cpu) + mem_eip_load16(cpu);
 				break;
 			case 0x06:	// [BP + disp16]
-				offset = cpu_regist_ebp(cpu) + mem_eip_load16(cpu);
+				offset = cpu_regist_bp(cpu) + mem_eip_load16(cpu);
 				break;
 			case 0x07:	// [BX + disp16]
-				offset = cpu_regist_ebx(cpu) + mem_eip_load16(cpu);
+				offset = cpu_regist_bx(cpu) + mem_eip_load16(cpu);
 				break;
 			}
 			address = &(cpu->mem[offset & 0xFFFF]);
@@ -772,7 +769,7 @@ void int2bin(char *dest, int val, int bitlen)
 	for (i=0; i<bitlen; i++) {
 		dest[i] = val & 1<<(bitlen-1-i) ? '1' : '0';
 	}
-	if (i<sizeof(dest)) {
+	if ((unsigned int)i<sizeof(dest)) {
 		dest[i] = '\0';
 	}
 }
@@ -975,15 +972,17 @@ void exec_cpux86(CPUx86 *cpu)
 				}
 				break;
 
-/*
 			case 0x8B:	// 8B /r sz : mov r32 r/m32
 				mem_eip_load_modrm(cpu);
 				if (is_cpu_modrm_r(cpu)) {
-					switch (cpu_modrm_mod(cpu)) {
-					}
+					printf("mod: %d\n", cpu_modrm_mod(cpu));
+					printf("dst(reg): %d\n", cpu_modrm_reg(cpu));
+					printf("src(rm): %d\n", cpu_modrm_rm(cpu));
+					printf("src val: %x\n", *(int*)cpu_modrm_address(cpu));
+					exit(1);
+					opcode_mov(cpu, &(cpu->regs[cpu_modrm_reg(cpu)]), cpu_operand_size(cpu), cpu_modrm_address(cpu), cpu_operand_size(cpu));
 				}
 				break;
-*/
 
 			// 0xB0
 			case 0xB8:	// B8 sz : mov eax imm32
@@ -996,6 +995,19 @@ void exec_cpux86(CPUx86 *cpu)
 			case 0xBF:	// BF sz : mov edi imm32
 				//cpu->regs[opcode & 0x07] = mem_eip_load32(cpu);
 				opcode_mov(cpu, &(cpu->regs[opcode & 0x07]), cpu_operand_size(cpu), mem_eip_ptr(cpu, 4), 4);
+				break;
+
+			// 0xC0
+			case 0xC7:	// C7 /0 id sz : mov r/m32 imm32
+				mem_eip_load_modrm(cpu);
+				switch (cpu_modrm_reg(cpu)) {
+				case 0:
+					opcode_mov(cpu, cpu_modrm_address(cpu), cpu_operand_size(cpu), mem_eip_ptr(cpu, 4), 4);
+					break;
+				default:
+					printf("not mapped opcode: 0xC0 reg %d\n", cpu_modrm_reg(cpu));
+					break;
+				}
 				break;
 
 			// 0xE0
@@ -1025,7 +1037,9 @@ int main(void)
 {
 	CPUx86 *cpu;
 
-	cpu = new_cpux86(1024*1024*5);
+	cpu = new_cpux86(1024*1024*32);
+	mem_store_file(cpu, 0x00100000, "../jslinux/files/vmlinux26.bin");
+	mem_store_file(cpu, 0x00400000, "../jslinux/files/root.bin");
 	mem_store_file(cpu, 0x10000, "../jslinux/files/linuxstart.bin");
 	cpu->eip = 0x10000;
 	cpu_regist_eax(cpu) = 0x2000000;
