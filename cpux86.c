@@ -11,10 +11,15 @@ typedef unsigned short uint16;
 typedef unsigned int uint32;
 
 
+// Descriptor Table Register
+
 typedef struct {
 	uint16 limit;	// Table Limit
 	uint32 base;	// Linear Base Address
 } DescTableReg;
+
+
+// CPUx86
 
 typedef struct {
 	// 一般レジスタ群
@@ -169,7 +174,7 @@ void cpu_current_reset(CPUx86 *cpu)
 #define cpu_cr0(cpu, type)			((cpu->cr0 & type) >> type##_BIT)
 
 
-// segment descriptor
+// Segment Descriptor
 
 typedef struct {
 	uint16 limitL;
@@ -616,6 +621,22 @@ void ret(CPUx86 *cpu, uint32 val)
 
 // opcode
 
+void opcode_adc(CPUx86 *cpu, void *dst, int dstlen, void *src, int srclen)
+{
+	uintp dstp;
+	uintp srcp;
+
+	dstp.ptr.voidp = dst;
+	dstp.type = dstlen;
+
+	srcp.ptr.voidp = src;
+	srcp.type = srclen;
+
+	set_uintp_val(&dstp, uintp_val(&dstp) + uintp_val(&srcp) + cpu_eflags(cpu, CPU_EFLAGS_CF));
+
+	// todo set flag: OF SF ZF AF PF
+}
+
 void opcode_add(CPUx86 *cpu, void *dst, int dstlen, void *src, int srclen)
 {
 	uintp dstp;
@@ -629,7 +650,39 @@ void opcode_add(CPUx86 *cpu, void *dst, int dstlen, void *src, int srclen)
 
 	set_uintp_val(&dstp, uintp_val(&dstp) + uintp_val(&srcp));
 
-	// todo set flag: OF SF ZF AF PF
+	// todo set flag: OF SF ZF AF CF PF
+}
+
+void opcode_and(CPUx86 *cpu, void *dst, int dstlen, void *src, int srclen)
+{
+	uintp dstp;
+	uintp srcp;
+
+	dstp.ptr.voidp = dst;
+	dstp.type = dstlen;
+
+	srcp.ptr.voidp = src;
+	srcp.type = srclen;
+
+	set_uintp_val(&dstp, uintp_val(&dstp) & uintp_val(&srcp));
+
+	// todo set flag: OF CF SF ZF PF
+}
+
+void opcode_cmp(CPUx86 *cpu, void *dst, int dstlen, void *src, int srclen)
+{
+	uintp dstp;
+	uintp srcp;
+
+	dstp.ptr.voidp = dst;
+	dstp.type = dstlen;
+
+	srcp.ptr.voidp = src;
+	srcp.type = srclen;
+
+	set_cpu_eflags(cpu, CPU_EFLAGS_ZF, uintp_val(&dstp)==uintp_val(&srcp) ? 1 : 0);
+
+	// todo set flag: CF OF SF ZF AF PF
 }
 
 void opcode_or(CPUx86 *cpu, void *dst, int dstlen, void *src, int srclen)
@@ -648,7 +701,7 @@ void opcode_or(CPUx86 *cpu, void *dst, int dstlen, void *src, int srclen)
 	// todo set flag: OF CF SF ZF PF
 }
 
-void opcode_and(CPUx86 *cpu, void *dst, int dstlen, void *src, int srclen)
+void opcode_mov(CPUx86 *cpu, void *dst, int dstlen, void *src, int srclen)
 {
 	uintp dstp;
 	uintp srcp;
@@ -659,9 +712,23 @@ void opcode_and(CPUx86 *cpu, void *dst, int dstlen, void *src, int srclen)
 	srcp.ptr.voidp = src;
 	srcp.type = srclen;
 
-	set_uintp_val(&dstp, uintp_val(&dstp) & uintp_val(&srcp));
+	set_uintp_val(&dstp, uintp_val(&srcp));
+}
 
-	// todo set flag: OF CF SF ZF PF
+void opcode_sbb(CPUx86 *cpu, void *dst, int dstlen, void *src, int srclen)
+{
+	uintp dstp;
+	uintp srcp;
+
+	dstp.ptr.voidp = dst;
+	dstp.type = dstlen;
+
+	srcp.ptr.voidp = src;
+	srcp.type = srclen;
+
+	set_uintp_val(&dstp, uintp_val(&dstp) - uintp_val(&srcp) - cpu_eflags(cpu, CPU_EFLAGS_CF));
+
+	// todo set flag: OF SF ZF AF PF CF
 }
 
 void opcode_sub(CPUx86 *cpu, void *dst, int dstlen, void *src, int srclen)
@@ -858,60 +925,30 @@ void exec_cpux86(CPUx86 *cpu)
 						// 83 /6 ib sz : xor r/m32 imm8
 						// 83 /7 ib sz : cmp r/m32 imm8
 						mem_eip_load_modrm(cpu);
-						switch (cpu_modrm_mod(cpu)) {
-						case 0x00:
-							printf("todo opcode 0x83 mod 0x00 reg 0x%X\n", cpu_modrm_reg(cpu));
-							exit(1);
+						switch (cpu_modrm_reg(cpu)) {
+						case 0:
+							opcode_add(cpu, cpu_modrm_address(cpu), cpu_operand_size(cpu), mem_eip_ptr(cpu, 1), 1);
 							break;
-						case 0x01:
-							printf("todo opcode 0x83 mod 0x01 reg 0x%X\n", cpu_modrm_reg(cpu));
-							exit(1);
+						case 1:
+							opcode_or(cpu, cpu_modrm_address(cpu), cpu_operand_size(cpu), mem_eip_ptr(cpu, 1), 1);
 							break;
-						case 0x03:	// レジスタ+disp16
-							switch (cpu_modrm_reg(cpu)) {
-							case 5:
-								opcode_sub(cpu, cpu_modrm_address(cpu), cpu_operand_size(cpu), mem_eip_ptr(cpu, 1), 1);
-								break;
-							default:
-								printf("todo opcode 0x83\n");
-								exit(0);
-							}
+						case 2:
+							opcode_adc(cpu, cpu_modrm_address(cpu), cpu_operand_size(cpu), mem_eip_ptr(cpu, 1), 1);
 							break;
-						case 0x04:	// レジスタ
-							switch (cpu_modrm_reg(cpu)) {
-							case 0:
-								opcode_add(cpu, &(cpu->regs[cpu_modrm_rm(cpu)]), cpu_operand_size(cpu), mem_eip_ptr(cpu, 1), 1);
-								break;
-							case 1:
-								opcode_or(cpu, &(cpu->regs[cpu_modrm_rm(cpu)]), cpu_operand_size(cpu), mem_eip_ptr(cpu, 1), 1);
-								break;
-							case 2:
-								cpu->regs[cpu_modrm_rm(cpu)] += mem_eip_load8(cpu) + cpu_eflags(cpu, CPU_EFLAGS_CF);
-								// todo set flag: OF SF ZF AF PF
-								break;
-							case 3:
-								cpu->regs[cpu_modrm_rm(cpu)] -= mem_eip_load8(cpu) + cpu_eflags(cpu, CPU_EFLAGS_CF);
-								// todo set flag: OF SF ZF AF PF CF
-								printf("todo opcode 0x83 mod 0x04 reg 0x03\n");
-								break;
-							case 4:
-								opcode_and(cpu, &(cpu->regs[cpu_modrm_rm(cpu)]), cpu_operand_size(cpu), mem_eip_ptr(cpu, 1), 1);
-								printf("todo opcode 0x83 mod 0x04 reg 0x04\n");
-								break;
-							case 5:
-								opcode_sub(cpu, &(cpu->regs[cpu_modrm_rm(cpu)]), cpu_operand_size(cpu), mem_eip_ptr(cpu, 1), 1);
-								printf("todo opcode 0x83 mod 0x04 reg 0x05\n");
-								break;
-							case 6:
-								opcode_xor(cpu, &(cpu->regs[cpu_modrm_rm(cpu)]), cpu_operand_size(cpu), mem_eip_ptr(cpu, 1), 1);
-								printf("todo opcode 0x83 mod 0x04 reg 0x06\n");
-								break;
-							case 7:
-								set_cpu_eflags(cpu, CPU_EFLAGS_ZF, cpu->regs[cpu_modrm_rm(cpu)]==mem_eip_load8(cpu) ? 1 : 0);
-								// todo set flag: CF OF SF ZF AF PF
-								printf("todo opcode 0x83 mod 0x04 reg 0x07\n");
-								break;
-							}
+						case 3:
+							opcode_sbb(cpu, cpu_modrm_address(cpu), cpu_operand_size(cpu), mem_eip_ptr(cpu, 1), 1);
+							break;
+						case 4:
+							opcode_and(cpu, cpu_modrm_address(cpu), cpu_operand_size(cpu), mem_eip_ptr(cpu, 1), 1);
+							break;
+						case 5:
+							opcode_sub(cpu, cpu_modrm_address(cpu), cpu_operand_size(cpu), mem_eip_ptr(cpu, 1), 1);
+							break;
+						case 6:
+							opcode_xor(cpu, cpu_modrm_address(cpu), cpu_operand_size(cpu), mem_eip_ptr(cpu, 1), 1);
+							break;
+						case 7:
+							opcode_cmp(cpu, cpu_modrm_address(cpu), cpu_operand_size(cpu), mem_eip_ptr(cpu, 1), 1);
 							break;
 						}
 						break;
@@ -957,7 +994,8 @@ void exec_cpux86(CPUx86 *cpu)
 					case 0xBD:	// BD sz : mov ebp imm32
 					case 0xBE:	// BE sz : mov esi imm32
 					case 0xBF:	// BF sz : mov edi imm32
-						cpu->regs[opcode & 0x07] = mem_eip_load32(cpu);
+						//cpu->regs[opcode & 0x07] = mem_eip_load32(cpu);
+						opcode_mov(cpu, &(cpu->regs[opcode & 0x07]), cpu_operand_size(cpu), mem_eip_ptr(cpu, 4), 4);
 						break;
 
 					// 0xE0
