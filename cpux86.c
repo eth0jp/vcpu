@@ -239,7 +239,7 @@ typedef struct {
 								(u)->ptr.uint32p )
 
 #define uintp_val(u)			( (u)->type==1 ? *((u)->ptr.uint8p) : \
-								(u)->type==-1 ? (*((u)->ptr.uint8p)&0xF0 ? *((u)->ptr.uint8p)|0xFFFFFF00 : *((u)->ptr.uint8p)) : \
+								(u)->type==-1 ? (*((u)->ptr.uint8p)&0x80 ? *((u)->ptr.uint8p)|0xFFFFFF00 : *((u)->ptr.uint8p)) : \
 								(u)->type==2 ? *((u)->ptr.uint16p) : \
 								*((u)->ptr.uint32p) )
 
@@ -247,6 +247,26 @@ typedef struct {
 								(u)->type==-1 ? (*((u)->ptr.uint8p)=((val)&0xFF)) : \
 								(u)->type==2 ? (*((u)->ptr.uint16p)=((val)&0xFFFF)) : \
 								(*((u)->ptr.uint32p)=((val)&0xFFFFFFFF)) )
+
+int uintp_cmp(uintp *p1, uintp *p2)
+{
+	if ((0<p1->type && 0<p2->type) || p1->type==p2->type) {
+		return uintp_val(p1) - uintp_val(p2);
+	}
+	if (p1->type==-1) {
+		if (p2->type==2) {
+			return (uintp_val(p1) & 0xFFFF) - uintp_val(p2);
+		} else {
+			return uintp_val(p1) - uintp_val(p2);
+		}
+	} else {
+		if (p1->type==2) {
+			return uintp_val(p1) - (uintp_val(p2) & 0xFFFF);
+		} else {
+			return uintp_val(p1) - uintp_val(p2);
+		}
+	}
+}
 
 void uintp_val_copy(uintp *dstp, uintp *srcp)
 {
@@ -305,16 +325,16 @@ uint8 mem_eip_load8(CPUx86 *cpu)
 	return val;
 }
 
-uint16 mem_eip_load8_se(CPUx86 *cpu)
+uint32 mem_eip_load8_se(CPUx86 *cpu)
 {
 	uint8 val8 = mem_eip_load8(cpu);
-	uint16 val16;
+	uint32 val32;
 	if (val8 & 0x80) {
-		val16 = val8 | 0xFF00;
+		val32 = val8 | 0xFFFFFF00;
 	} else {
-		val16 = val8 & 0x00FF;
+		val32 = val8 & 0x000000FF;
 	}
-	return val16;
+	return val32;
 }
 
 uint16 mem_eip_load16(CPUx86 *cpu)
@@ -416,7 +436,8 @@ int cpu_sib_base(CPUx86 *cpu)
 	return cpu->sib & 0x03;
 }
 
-#define cpu_operand_size(cpu)	(((cpu_cr0(cpu, CR0_PE) + ((cpu)->prefix.operand_size ? 1 : 0)) & 1) ? 2 : 4)
+//#define cpu_operand_size(cpu)	(((cpu_cr0(cpu, CR0_PE) + ((cpu)->prefix.operand_size ? 1 : 0)) & 1) ? 2 : 4)
+#define cpu_operand_size(cpu)	((cpu_cr0(cpu, CR0_PE)==(cpu)->prefix.operand_size) ? 2 : 4)
 
 void* cpu_modrm_address(CPUx86 *cpu)
 {
@@ -547,7 +568,7 @@ void* cpu_modrm_address(CPUx86 *cpu)
 				offset = cpu_regist_bx(cpu) + mem_eip_load8_se(cpu);
 				break;
 			}
-printf("offset: %x\n", offset&0xFFFF);
+printf("offset: %x\n", offset);
 			address = &(cpu->mem[offset & 0xFFFF]);
 			break;
 		case 0x02:	// [レジスタ + disp16]
@@ -677,7 +698,7 @@ void opcode_cmp(CPUx86 *cpu, void *dst, int dstlen, void *src, int srclen)
 	srcp.ptr.voidp = src;
 	srcp.type = srclen;
 
-	set_cpu_eflags(cpu, CPU_EFLAGS_ZF, uintp_val(&dstp)==uintp_val(&srcp) ? 1 : 0);
+	set_cpu_eflags(cpu, CPU_EFLAGS_ZF, uintp_cmp(&dstp, &srcp)==0 ? 1 : 0);
 
 	// todo set flag: CF OF SF ZF AF PF
 }
@@ -924,28 +945,28 @@ void exec_cpux86(CPUx86 *cpu)
 				mem_eip_load_modrm(cpu);
 				switch (cpu_modrm_reg(cpu)) {
 				case 0:
-					opcode_add(cpu, cpu_modrm_address(cpu), cpu_operand_size(cpu), mem_eip_ptr(cpu, 1), 1);
+					opcode_add(cpu, cpu_modrm_address(cpu), cpu_operand_size(cpu), mem_eip_ptr(cpu, 1), -1);
 					break;
 				case 1:
-					opcode_or(cpu, cpu_modrm_address(cpu), cpu_operand_size(cpu), mem_eip_ptr(cpu, 1), 1);
+					opcode_or(cpu, cpu_modrm_address(cpu), cpu_operand_size(cpu), mem_eip_ptr(cpu, 1), -1);
 					break;
 				case 2:
-					opcode_adc(cpu, cpu_modrm_address(cpu), cpu_operand_size(cpu), mem_eip_ptr(cpu, 1), 1);
+					opcode_adc(cpu, cpu_modrm_address(cpu), cpu_operand_size(cpu), mem_eip_ptr(cpu, 1), -1);
 					break;
 				case 3:
-					opcode_sbb(cpu, cpu_modrm_address(cpu), cpu_operand_size(cpu), mem_eip_ptr(cpu, 1), 1);
+					opcode_sbb(cpu, cpu_modrm_address(cpu), cpu_operand_size(cpu), mem_eip_ptr(cpu, 1), -1);
 					break;
 				case 4:
-					opcode_and(cpu, cpu_modrm_address(cpu), cpu_operand_size(cpu), mem_eip_ptr(cpu, 1), 1);
+					opcode_and(cpu, cpu_modrm_address(cpu), cpu_operand_size(cpu), mem_eip_ptr(cpu, 1), -1);
 					break;
 				case 5:
-					opcode_sub(cpu, cpu_modrm_address(cpu), cpu_operand_size(cpu), mem_eip_ptr(cpu, 1), 1);
+					opcode_sub(cpu, cpu_modrm_address(cpu), cpu_operand_size(cpu), mem_eip_ptr(cpu, 1), -1);
 					break;
 				case 6:
-					opcode_xor(cpu, cpu_modrm_address(cpu), cpu_operand_size(cpu), mem_eip_ptr(cpu, 1), 1);
+					opcode_xor(cpu, cpu_modrm_address(cpu), cpu_operand_size(cpu), mem_eip_ptr(cpu, 1), -1);
 					break;
 				case 7:
-					opcode_cmp(cpu, cpu_modrm_address(cpu), cpu_operand_size(cpu), mem_eip_ptr(cpu, 1), 1);
+					opcode_cmp(cpu, cpu_modrm_address(cpu), cpu_operand_size(cpu), mem_eip_ptr(cpu, 1), -1);
 					break;
 				}
 				break;
@@ -994,6 +1015,7 @@ void exec_cpux86(CPUx86 *cpu)
 			case 0xBE:	// BE sz : mov esi imm32
 			case 0xBF:	// BF sz : mov edi imm32
 				//cpu->regs[opcode & 0x07] = mem_eip_load32(cpu);
+				printf("cpu_operand_size: %d\n", cpu_operand_size(cpu));
 				opcode_mov(cpu, &(cpu->regs[opcode & 0x07]), cpu_operand_size(cpu), mem_eip_ptr(cpu, 4), 4);
 				break;
 
