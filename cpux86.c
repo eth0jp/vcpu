@@ -393,7 +393,7 @@ uint32 seg_ss(CPUx86 *cpu)
 void mem_eip_load_modrm(CPUx86 *cpu)
 {
 	cpu->modrm = mem_eip_load8(cpu);
-	if ((cpu->modrm&0xC0)!=0xC0 && (cpu->modrm&38)==0x20) {
+	if (cpu_modrm_mod(cpu)!=3 && cpu_modrm_rm(cpu)==5) {
 		cpu->sib = mem_eip_load8(cpu);
 	} else {
 		cpu->sib = 0;
