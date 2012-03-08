@@ -648,144 +648,63 @@ void ret(CPUx86 *cpu, uint32 val)
 
 // opcode
 
-void opcode_adc(CPUx86 *cpu, void *dst, int dstlen, void *src, int srclen)
+void opcode_adc(CPUx86 *cpu, uintp *dst, uintp *src)
 {
-	uintp dstp;
-	uintp srcp;
-
-	dstp.ptr.voidp = dst;
-	dstp.type = dstlen;
-
-	srcp.ptr.voidp = src;
-	srcp.type = srclen;
-
-	set_uintp_val(&dstp, uintp_val(&dstp) + uintp_val(&srcp) + cpu_eflags(cpu, CPU_EFLAGS_CF));
+	set_uintp_val(dst, uintp_val(dst) + uintp_val(src) + cpu_eflags(cpu, CPU_EFLAGS_CF));
 
 	// todo set flag: OF SF ZF AF PF
 }
 
-void opcode_add(CPUx86 *cpu, void *dst, int dstlen, void *src, int srclen)
+void opcode_add(CPUx86 *cpu, uintp *dst, uintp *src)
 {
-	uintp dstp;
-	uintp srcp;
-
-	dstp.ptr.voidp = dst;
-	dstp.type = dstlen;
-
-	srcp.ptr.voidp = src;
-	srcp.type = srclen;
-
-	set_uintp_val(&dstp, uintp_val(&dstp) + uintp_val(&srcp));
+	set_uintp_val(dst, uintp_val(dst) + uintp_val(src));
 
 	// todo set flag: OF SF ZF AF CF PF
 }
 
-void opcode_and(CPUx86 *cpu, void *dst, int dstlen, void *src, int srclen)
+void opcode_and(CPUx86 *cpu, uintp *dst, uintp *src)
 {
-	uintp dstp;
-	uintp srcp;
-
-	dstp.ptr.voidp = dst;
-	dstp.type = dstlen;
-
-	srcp.ptr.voidp = src;
-	srcp.type = srclen;
-
-	set_uintp_val(&dstp, uintp_val(&dstp) & uintp_val(&srcp));
+	set_uintp_val(dst, uintp_val(dst) & uintp_val(src));
 
 	// todo set flag: OF CF SF ZF PF
 }
 
-void opcode_cmp(CPUx86 *cpu, void *dst, int dstlen, void *src, int srclen)
+void opcode_cmp(CPUx86 *cpu, uintp *dst, uintp *src)
 {
-	uintp dstp;
-	uintp srcp;
-
-	dstp.ptr.voidp = dst;
-	dstp.type = dstlen;
-
-	srcp.ptr.voidp = src;
-	srcp.type = srclen;
-
-	set_cpu_eflags(cpu, CPU_EFLAGS_ZF, uintp_cmp(&dstp, &srcp)==0 ? 1 : 0);
+	set_cpu_eflags(cpu, CPU_EFLAGS_ZF, uintp_cmp(dst, src)==0 ? 1 : 0);
 
 	// todo set flag: CF OF SF ZF AF PF
 }
 
-void opcode_or(CPUx86 *cpu, void *dst, int dstlen, void *src, int srclen)
+void opcode_or(CPUx86 *cpu, uintp *dst, uintp *src)
 {
-	uintp dstp;
-	uintp srcp;
-
-	dstp.ptr.voidp = dst;
-	dstp.type = dstlen;
-
-	srcp.ptr.voidp = src;
-	srcp.type = srclen;
-
-	set_uintp_val(&dstp, uintp_val(&dstp) | uintp_val(&srcp));
+	set_uintp_val(dst, uintp_val(dst) | uintp_val(src));
 
 	// todo set flag: OF CF SF ZF PF
 }
 
-void opcode_mov(CPUx86 *cpu, void *dst, int dstlen, void *src, int srclen)
+void opcode_mov(CPUx86 *cpu, uintp *dst, uintp *src)
 {
-	uintp dstp;
-	uintp srcp;
-
-	dstp.ptr.voidp = dst;
-	dstp.type = dstlen;
-
-	srcp.ptr.voidp = src;
-	srcp.type = srclen;
-
-	set_uintp_val(&dstp, uintp_val(&srcp));
+	set_uintp_val(dst, uintp_val(src));
 }
 
-void opcode_sbb(CPUx86 *cpu, void *dst, int dstlen, void *src, int srclen)
+void opcode_sbb(CPUx86 *cpu, uintp *dst, uintp *src)
 {
-	uintp dstp;
-	uintp srcp;
-
-	dstp.ptr.voidp = dst;
-	dstp.type = dstlen;
-
-	srcp.ptr.voidp = src;
-	srcp.type = srclen;
-
-	set_uintp_val(&dstp, uintp_val(&dstp) - uintp_val(&srcp) - cpu_eflags(cpu, CPU_EFLAGS_CF));
+	set_uintp_val(dst, uintp_val(dst) - uintp_val(src) - cpu_eflags(cpu, CPU_EFLAGS_CF));
 
 	// todo set flag: OF SF ZF AF PF CF
 }
 
-void opcode_sub(CPUx86 *cpu, void *dst, int dstlen, void *src, int srclen)
+void opcode_sub(CPUx86 *cpu, uintp *dst, uintp *src)
 {
-	uintp dstp;
-	uintp srcp;
-
-	dstp.ptr.voidp = dst;
-	dstp.type = dstlen;
-
-	srcp.ptr.voidp = src;
-	srcp.type = srclen;
-
-	set_uintp_val(&dstp, uintp_val(&dstp) - uintp_val(&srcp));
+	set_uintp_val(dst, uintp_val(dst) - uintp_val(src));
 
 	// todo set flag: OF SF ZF AF PF CF
 }
 
-void opcode_xor(CPUx86 *cpu, void *dst, int dstlen, void *src, int srclen)
+void opcode_xor(CPUx86 *cpu, uintp *dst, uintp *src)
 {
-	uintp dstp;
-	uintp srcp;
-
-	dstp.ptr.voidp = dst;
-	dstp.type = dstlen;
-
-	srcp.ptr.voidp = src;
-	srcp.type = srclen;
-
-	set_uintp_val(&dstp, uintp_val(&dstp) ^ uintp_val(&srcp));
+	set_uintp_val(dst, uintp_val(dst) ^ uintp_val(src));
 
 	// todo set flag: OF CF SF ZF PF
 }
@@ -953,32 +872,42 @@ void exec_cpux86(CPUx86 *cpu)
 				// 83 /5 ib sz : sub r/m32 imm8
 				// 83 /6 ib sz : xor r/m32 imm8
 				// 83 /7 ib sz : cmp r/m32 imm8
+
+				// modrm
 				mem_eip_load_modrm(cpu);
+
+				// operand1
 				cpu_modrm_address(cpu, &operand1, 0);
+
+				// operand2
+				operand2.ptr.voidp = mem_eip_ptr(cpu, 1);
+				operand2.type = -1;
+
+				// operator
 				switch (cpu_modrm_reg(cpu)) {
 				case 0:
-					opcode_add(cpu, operand1.ptr.voidp, operand1.type, mem_eip_ptr(cpu, 1), -1);
+					opcode_add(cpu, &operand1, &operand2);
 					break;
 				case 1:
-					opcode_or(cpu, operand1.ptr.voidp, operand1.type, mem_eip_ptr(cpu, 1), -1);
+					opcode_or(cpu, &operand1, &operand2);
 					break;
 				case 2:
-					opcode_adc(cpu, operand1.ptr.voidp, operand1.type, mem_eip_ptr(cpu, 1), -1);
+					opcode_adc(cpu, &operand1, &operand2);
 					break;
 				case 3:
-					opcode_sbb(cpu, operand1.ptr.voidp, operand1.type, mem_eip_ptr(cpu, 1), -1);
+					opcode_sbb(cpu, &operand1, &operand2);
 					break;
 				case 4:
-					opcode_and(cpu, operand1.ptr.voidp, operand1.type, mem_eip_ptr(cpu, 1), -1);
+					opcode_and(cpu, &operand1, &operand2);
 					break;
 				case 5:
-					opcode_sub(cpu, operand1.ptr.voidp, operand1.type, mem_eip_ptr(cpu, 1), -1);
+					opcode_sub(cpu, &operand1, &operand2);
 					break;
 				case 6:
-					opcode_xor(cpu, operand1.ptr.voidp, operand1.type, mem_eip_ptr(cpu, 1), -1);
+					opcode_xor(cpu, &operand1, &operand2);
 					break;
 				case 7:
-					opcode_cmp(cpu, operand1.ptr.voidp, operand1.type, mem_eip_ptr(cpu, 1), -1);
+					opcode_cmp(cpu, &operand1, &operand2);
 					break;
 				}
 				break;
@@ -1004,18 +933,30 @@ void exec_cpux86(CPUx86 *cpu)
 						break;
 					}
 */
+					// operand1
 					cpu_modrm_address(cpu, &operand1, 0);
-					opcode_mov(cpu, operand1.ptr.voidp, operand1.type, &(cpu->regs[cpu_modrm_reg(cpu)]), 4);
+
+					// operand2
+					operand2.ptr.voidp = &(cpu->regs[cpu_modrm_reg(cpu)]);
+					operand2.type = 4;
+
+					// operator
+					opcode_mov(cpu, &operand1, &operand2);
 				}
 				break;
 
 			case 0x8B:	// 8B /r sz : mov r32 r/m32
 				mem_eip_load_modrm(cpu);
 				if (is_cpu_modrm_r(cpu)) {
+					// operand1
 					operand1.ptr.voidp = &(cpu->regs[cpu_modrm_reg(cpu)]);
 					operand1.type = 4;
+
+					// operand2
 					cpu_modrm_address(cpu, &operand2, 1);
-					opcode_mov(cpu, operand1.ptr.voidp, operand1.type, operand2.ptr.voidp, operand2.type);
+
+					// operator
+					opcode_mov(cpu, &operand1, &operand2);
 				}
 				break;
 
@@ -1029,8 +970,17 @@ void exec_cpux86(CPUx86 *cpu)
 			case 0xBE:	// BE sz : mov esi imm32
 			case 0xBF:	// BF sz : mov edi imm32
 				//cpu->regs[opcode & 0x07] = mem_eip_load32(cpu);
-				printf("cpu_operand_size: %d\n", cpu_operand_size(cpu));
-				opcode_mov(cpu, &(cpu->regs[opcode & 0x07]), 4, mem_eip_ptr(cpu, 4), 4);
+
+				// operand1
+				operand1.ptr.voidp = &(cpu->regs[opcode & 0x07]);
+				operand1.type = 4;
+
+				// operand2
+				operand2.ptr.voidp = mem_eip_ptr(cpu, 4);
+				operand2.type = 4;
+
+				// operator
+				opcode_mov(cpu, &operand1, &operand2);
 				break;
 
 			// 0xC0
@@ -1038,8 +988,15 @@ void exec_cpux86(CPUx86 *cpu)
 				mem_eip_load_modrm(cpu);
 				switch (cpu_modrm_reg(cpu)) {
 				case 0:
+					// operand1
 					cpu_modrm_address(cpu, &operand1, 0);
-					opcode_mov(cpu, operand1.ptr.voidp, operand1.type, mem_eip_ptr(cpu, 4), 4);
+
+					// operand2
+					operand2.ptr.voidp = mem_eip_ptr(cpu, 4);
+					operand2.type = 4;
+
+					// operator
+					opcode_mov(cpu, &operand1, &operand2);
 					break;
 				default:
 					printf("not mapped opcode: 0xC0 reg %d\n", cpu_modrm_reg(cpu));
