@@ -439,15 +439,14 @@ int cpu_sib_base(CPUx86 *cpu)
 //#define cpu_operand_size(cpu)	(((cpu_cr0(cpu, CR0_PE) + ((cpu)->prefix.operand_size ? 1 : 0)) & 1) ? 2 : 4)
 #define cpu_operand_size(cpu)	((cpu_cr0(cpu, CR0_PE)==(cpu)->prefix.operand_size) ? 2 : 4)
 
-void* cpu_modrm_address(CPUx86 *cpu)
+void cpu_modrm_address(CPUx86 *cpu, uintp *result, int use_reg)
 {
 	int mod;
 	int rm;
 	uint32 offset;
-	void *address;
 
 	mod = cpu_modrm_mod(cpu);
-	rm = cpu_modrm_rm(cpu);
+	rm = use_reg ? cpu_modrm_reg(cpu) : cpu_modrm_rm(cpu);
 
 	if (cpu_cr0(cpu, CR0_PE)) {
 		// プロテクトモード
@@ -469,7 +468,8 @@ void* cpu_modrm_address(CPUx86 *cpu)
 				offset = mem_eip_load32(cpu);
 				break;
 			}
-			address = &(cpu->mem[offset]);
+			result->ptr.voidp = &(cpu->mem[offset]);
+			result->type = cpu->prefix.operand_size ? 2 : 4;
 			break;
 		case 0x01:
 			switch (rm) {
@@ -486,7 +486,8 @@ void* cpu_modrm_address(CPUx86 *cpu)
 				// todo
 				break;
 			}
-			address = &(cpu->mem[offset]);
+			result->ptr.voidp = &(cpu->mem[offset]);
+			result->type = cpu->prefix.operand_size ? 2 : 4;
 			break;
 		case 0x02:
 			switch (rm) {
@@ -503,10 +504,12 @@ void* cpu_modrm_address(CPUx86 *cpu)
 				// todo
 				break;
 			}
-			address = &(cpu->mem[offset]);
+			result->ptr.voidp = &(cpu->mem[offset]);
+			result->type = cpu->prefix.operand_size ? 2 : 4;
 			break;
 		case 0x03:
-			address = &(cpu->regs[rm]);
+			result->ptr.voidp = &(cpu->regs[rm]);
+			result->type = 4;
 			break;
 		}
 	} else {
@@ -515,97 +518,99 @@ void* cpu_modrm_address(CPUx86 *cpu)
 		case 0x00:	// [レジスタ + レジスタ]
 			switch (rm) {
 			case 0x00:	// [BX + SI]
-				offset = cpu_regist_bx(cpu) + cpu_regist_si(cpu);
+				offset = cpu_regist_ebx(cpu) + cpu_regist_esi(cpu);
 				break;
 			case 0x01:	// [BX + DI]
-				offset = cpu_regist_bx(cpu) + cpu_regist_di(cpu);
+				offset = cpu_regist_ebx(cpu) + cpu_regist_edi(cpu);
 				break;
 			case 0x02:	// [BP + SI]
-				offset = cpu_regist_bp(cpu) + cpu_regist_si(cpu);
+				offset = cpu_regist_ebp(cpu) + cpu_regist_esi(cpu);
 				break;
 			case 0x03:	// [BP + DI]
-				offset = cpu_regist_bp(cpu) + cpu_regist_di(cpu);
+				offset = cpu_regist_ebp(cpu) + cpu_regist_edi(cpu);
 				break;
 			case 0x04:	// [SI]
-				offset = cpu_regist_si(cpu);
+				offset = cpu_regist_esi(cpu);
 				break;
 			case 0x05:	// [DI]
-				offset = cpu_regist_di(cpu);
+				offset = cpu_regist_edi(cpu);
 				break;
 			case 0x06:	// [disp16]
 				offset = mem_eip_load16(cpu);
 				break;
 			case 0x07:	// [BX]
-				offset = cpu_regist_bx(cpu);
+				offset = cpu_regist_ebx(cpu);
 				break;
 			}
-			address = &(cpu->mem[offset & 0xFFFF]);
+			result->ptr.voidp = &(cpu->mem[offset]);
+			result->type = cpu->prefix.operand_size ? 2 : 4;
 			break;
 		case 0x01:	// [レジスタ + disp8]
 			switch (rm) {
 			case 0x00:	// [BX + SI + disp8]
-				offset = cpu_regist_bx(cpu) + cpu_regist_si(cpu) + mem_eip_load8_se(cpu);
+				offset = cpu_regist_ebx(cpu) + cpu_regist_esi(cpu) + mem_eip_load8_se(cpu);
 				break;
 			case 0x01:	// [BX + DI + disp8]
-				offset = cpu_regist_bx(cpu) + cpu_regist_di(cpu) + mem_eip_load8_se(cpu);
+				offset = cpu_regist_ebx(cpu) + cpu_regist_edi(cpu) + mem_eip_load8_se(cpu);
 				break;
 			case 0x02:	// [BP + SI + disp8]
-				offset = cpu_regist_bp(cpu) + cpu_regist_si(cpu) + mem_eip_load8_se(cpu);
+				offset = cpu_regist_ebp(cpu) + cpu_regist_esi(cpu) + mem_eip_load8_se(cpu);
 				break;
 			case 0x03:	// [BP + DI + disp8]
-				offset = cpu_regist_bp(cpu) + cpu_regist_di(cpu) + mem_eip_load8_se(cpu);
+				offset = cpu_regist_ebp(cpu) + cpu_regist_edi(cpu) + mem_eip_load8_se(cpu);
 				break;
 			case 0x04:	// [SI + disp8]
-				offset = cpu_regist_si(cpu) + mem_eip_load8_se(cpu);
+				offset = cpu_regist_esi(cpu) + mem_eip_load8_se(cpu);
 				break;
 			case 0x05:	// [DI + disp8]
-				offset = cpu_regist_di(cpu) + mem_eip_load8_se(cpu);
+				offset = cpu_regist_edi(cpu) + mem_eip_load8_se(cpu);
 				break;
 			case 0x06:	// [BP + disp8]
-				offset = cpu_regist_bp(cpu) + mem_eip_load8_se(cpu);
+				offset = cpu_regist_ebp(cpu) + mem_eip_load8_se(cpu);
 				break;
 			case 0x07:	// [BX + disp8]
-				offset = cpu_regist_bx(cpu) + mem_eip_load8_se(cpu);
+				offset = cpu_regist_ebx(cpu) + mem_eip_load8_se(cpu);
 				break;
 			}
-printf("offset: %x\n", offset);
-			address = &(cpu->mem[offset & 0xFFFF]);
+			result->ptr.voidp = &(cpu->mem[offset]);
+			result->type = cpu->prefix.operand_size ? 2 : 4;
 			break;
 		case 0x02:	// [レジスタ + disp16]
 			switch (rm) {
 			case 0x00:	// [BX + SI + disp16]
-				offset = cpu_regist_bx(cpu) + cpu_regist_si(cpu) + mem_eip_load16(cpu);
+				offset = cpu_regist_ebx(cpu) + cpu_regist_esi(cpu) + mem_eip_load16(cpu);
 				break;
 			case 0x01:	// [BX + DI + disp16]
-				offset = cpu_regist_bx(cpu) + cpu_regist_di(cpu) + mem_eip_load16(cpu);
+				offset = cpu_regist_ebx(cpu) + cpu_regist_edi(cpu) + mem_eip_load16(cpu);
 				break;
 			case 0x02:	// [BP + SI + disp16]
-				offset = cpu_regist_bp(cpu) + cpu_regist_si(cpu) + mem_eip_load16(cpu);
+				offset = cpu_regist_ebp(cpu) + cpu_regist_esi(cpu) + mem_eip_load16(cpu);
 				break;
 			case 0x03:	// [BP + DI + disp16]
-				offset = cpu_regist_bp(cpu) + cpu_regist_di(cpu) + mem_eip_load16(cpu);
+				offset = cpu_regist_ebp(cpu) + cpu_regist_edi(cpu) + mem_eip_load16(cpu);
 				break;
 			case 0x04:	// [SI + disp16]
-				offset = cpu_regist_si(cpu) + mem_eip_load16(cpu);
+				offset = cpu_regist_esi(cpu) + mem_eip_load16(cpu);
 				break;
 			case 0x05:	// [DI + disp16]
-				offset = cpu_regist_di(cpu) + mem_eip_load16(cpu);
+				offset = cpu_regist_edi(cpu) + mem_eip_load16(cpu);
 				break;
 			case 0x06:	// [BP + disp16]
-				offset = cpu_regist_bp(cpu) + mem_eip_load16(cpu);
+				offset = cpu_regist_ebp(cpu) + mem_eip_load16(cpu);
 				break;
 			case 0x07:	// [BX + disp16]
-				offset = cpu_regist_bx(cpu) + mem_eip_load16(cpu);
+				offset = cpu_regist_ebx(cpu) + mem_eip_load16(cpu);
 				break;
 			}
-			address = &(cpu->mem[offset & 0xFFFF]);
+			result->ptr.voidp = &(cpu->mem[offset]);
+			result->type = cpu->prefix.operand_size ? 2 : 4;
 			break;
 		case 0x03:	// レジスタ
-			address = &(cpu->regs[rm]);
+			result->ptr.voidp = &(cpu->regs[rm]);
+			result->type = 4;
 			break;
 		}
 	}
-	return address;
 }
 
 
@@ -613,8 +618,12 @@ printf("offset: %x\n", offset);
 
 void stack_push(CPUx86 *cpu, uint32 val)
 {
+	uintp stack;
 	cpu_regist_esp(cpu) -= 4;
-	cpu->mem[seg_ss(cpu) + cpu_regist_esp(cpu)] = val;
+
+	stack.ptr.voidp = &(cpu->mem[cpu_regist_esp(cpu)]);
+	stack.type = 4;
+	set_uintp_val(&stack, val);
 }
 
 void stack_pop(CPUx86 *cpu)
@@ -842,6 +851,8 @@ void exec_cpux86(CPUx86 *cpu)
 	int c=0;
 	int i;
 	int is_prefix;
+	uintp operand1;
+	uintp operand2;
 
 	while (c++<20) {
 		dump_cpu(cpu);
@@ -943,36 +954,38 @@ void exec_cpux86(CPUx86 *cpu)
 				// 83 /6 ib sz : xor r/m32 imm8
 				// 83 /7 ib sz : cmp r/m32 imm8
 				mem_eip_load_modrm(cpu);
+				cpu_modrm_address(cpu, &operand1, 0);
 				switch (cpu_modrm_reg(cpu)) {
 				case 0:
-					opcode_add(cpu, cpu_modrm_address(cpu), cpu_operand_size(cpu), mem_eip_ptr(cpu, 1), -1);
+					opcode_add(cpu, operand1.ptr.voidp, operand1.type, mem_eip_ptr(cpu, 1), -1);
 					break;
 				case 1:
-					opcode_or(cpu, cpu_modrm_address(cpu), cpu_operand_size(cpu), mem_eip_ptr(cpu, 1), -1);
+					opcode_or(cpu, operand1.ptr.voidp, operand1.type, mem_eip_ptr(cpu, 1), -1);
 					break;
 				case 2:
-					opcode_adc(cpu, cpu_modrm_address(cpu), cpu_operand_size(cpu), mem_eip_ptr(cpu, 1), -1);
+					opcode_adc(cpu, operand1.ptr.voidp, operand1.type, mem_eip_ptr(cpu, 1), -1);
 					break;
 				case 3:
-					opcode_sbb(cpu, cpu_modrm_address(cpu), cpu_operand_size(cpu), mem_eip_ptr(cpu, 1), -1);
+					opcode_sbb(cpu, operand1.ptr.voidp, operand1.type, mem_eip_ptr(cpu, 1), -1);
 					break;
 				case 4:
-					opcode_and(cpu, cpu_modrm_address(cpu), cpu_operand_size(cpu), mem_eip_ptr(cpu, 1), -1);
+					opcode_and(cpu, operand1.ptr.voidp, operand1.type, mem_eip_ptr(cpu, 1), -1);
 					break;
 				case 5:
-					opcode_sub(cpu, cpu_modrm_address(cpu), cpu_operand_size(cpu), mem_eip_ptr(cpu, 1), -1);
+					opcode_sub(cpu, operand1.ptr.voidp, operand1.type, mem_eip_ptr(cpu, 1), -1);
 					break;
 				case 6:
-					opcode_xor(cpu, cpu_modrm_address(cpu), cpu_operand_size(cpu), mem_eip_ptr(cpu, 1), -1);
+					opcode_xor(cpu, operand1.ptr.voidp, operand1.type, mem_eip_ptr(cpu, 1), -1);
 					break;
 				case 7:
-					opcode_cmp(cpu, cpu_modrm_address(cpu), cpu_operand_size(cpu), mem_eip_ptr(cpu, 1), -1);
+					opcode_cmp(cpu, operand1.ptr.voidp, operand1.type, mem_eip_ptr(cpu, 1), -1);
 					break;
 				}
 				break;
 			case 0x89:	// 89 /r sz : mov r/m32 r32
 				mem_eip_load_modrm(cpu);
 				if (is_cpu_modrm_r(cpu)) {
+/*
 					switch (cpu_modrm_mod(cpu)) {
 					case 0x00:
 						printf("todo opcode 0x89 mod 0x00\n");
@@ -990,18 +1003,19 @@ void exec_cpux86(CPUx86 *cpu)
 						cpu->regs[cpu_modrm_rm(cpu)] = cpu->regs[cpu_modrm_reg(cpu)];
 						break;
 					}
+*/
+					cpu_modrm_address(cpu, &operand1, 0);
+					opcode_mov(cpu, operand1.ptr.voidp, operand1.type, &(cpu->regs[cpu_modrm_reg(cpu)]), 4);
 				}
 				break;
 
 			case 0x8B:	// 8B /r sz : mov r32 r/m32
 				mem_eip_load_modrm(cpu);
 				if (is_cpu_modrm_r(cpu)) {
-					printf("mod: %d\n", cpu_modrm_mod(cpu));
-					printf("dst(reg): %d\n", cpu_modrm_reg(cpu));
-					printf("src(rm): %d\n", cpu_modrm_rm(cpu));
-					printf("src val: %x\n", *(int*)cpu_modrm_address(cpu));
-					exit(1);
-					opcode_mov(cpu, &(cpu->regs[cpu_modrm_reg(cpu)]), cpu_operand_size(cpu), cpu_modrm_address(cpu), cpu_operand_size(cpu));
+					operand1.ptr.voidp = &(cpu->regs[cpu_modrm_reg(cpu)]);
+					operand1.type = 4;
+					cpu_modrm_address(cpu, &operand2, 1);
+					opcode_mov(cpu, operand1.ptr.voidp, operand1.type, operand2.ptr.voidp, operand2.type);
 				}
 				break;
 
@@ -1016,7 +1030,7 @@ void exec_cpux86(CPUx86 *cpu)
 			case 0xBF:	// BF sz : mov edi imm32
 				//cpu->regs[opcode & 0x07] = mem_eip_load32(cpu);
 				printf("cpu_operand_size: %d\n", cpu_operand_size(cpu));
-				opcode_mov(cpu, &(cpu->regs[opcode & 0x07]), cpu_operand_size(cpu), mem_eip_ptr(cpu, 4), 4);
+				opcode_mov(cpu, &(cpu->regs[opcode & 0x07]), 4, mem_eip_ptr(cpu, 4), 4);
 				break;
 
 			// 0xC0
@@ -1024,7 +1038,8 @@ void exec_cpux86(CPUx86 *cpu)
 				mem_eip_load_modrm(cpu);
 				switch (cpu_modrm_reg(cpu)) {
 				case 0:
-					opcode_mov(cpu, cpu_modrm_address(cpu), cpu_operand_size(cpu), mem_eip_ptr(cpu, 4), 4);
+					cpu_modrm_address(cpu, &operand1, 0);
+					opcode_mov(cpu, operand1.ptr.voidp, operand1.type, mem_eip_ptr(cpu, 4), 4);
 					break;
 				default:
 					printf("not mapped opcode: 0xC0 reg %d\n", cpu_modrm_reg(cpu));
