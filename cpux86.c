@@ -521,28 +521,28 @@ void cpu_modrm_address(CPUx86 *cpu, uintp *result, int use_reg)
 		case 0x00:	// [レジスタ + レジスタ]
 			switch (rm) {
 			case 0x00:	// [BX + SI]
-				offset = cpu_regist_ebx(cpu) + cpu_regist_esi(cpu);
+				offset = cpu_regist_bx(cpu) + cpu_regist_si(cpu);
 				break;
 			case 0x01:	// [BX + DI]
-				offset = cpu_regist_ebx(cpu) + cpu_regist_edi(cpu);
+				offset = cpu_regist_bx(cpu) + cpu_regist_di(cpu);
 				break;
 			case 0x02:	// [BP + SI]
-				offset = cpu_regist_ebp(cpu) + cpu_regist_esi(cpu);
+				offset = cpu_regist_bp(cpu) + cpu_regist_si(cpu);
 				break;
 			case 0x03:	// [BP + DI]
-				offset = cpu_regist_ebp(cpu) + cpu_regist_edi(cpu);
+				offset = cpu_regist_bp(cpu) + cpu_regist_di(cpu);
 				break;
 			case 0x04:	// [SI]
-				offset = cpu_regist_esi(cpu);
+				offset = cpu_regist_si(cpu);
 				break;
 			case 0x05:	// [DI]
-				offset = cpu_regist_edi(cpu);
+				offset = cpu_regist_di(cpu);
 				break;
 			case 0x06:	// [disp16]
 				offset = mem_eip_load16(cpu);
 				break;
 			case 0x07:	// [BX]
-				offset = cpu_regist_ebx(cpu);
+				offset = cpu_regist_bx(cpu);
 				break;
 			}
 			result->ptr.voidp = &(cpu->mem[cpu->regs[rm] + offset]);
@@ -551,29 +551,29 @@ void cpu_modrm_address(CPUx86 *cpu, uintp *result, int use_reg)
 		case 0x01:	// [レジスタ + disp8]
 			switch (rm) {
 			case 0x00:	// [BX + SI + disp8]
-				offset = cpu_regist_ebx(cpu) + cpu_regist_esi(cpu) + mem_eip_load8_se(cpu);
+				offset = cpu_regist_bx(cpu) + cpu_regist_si(cpu) + mem_eip_load8_se(cpu);
 				break;
 			case 0x01:	// [BX + DI + disp8]
-				offset = cpu_regist_ebx(cpu) + cpu_regist_edi(cpu) + mem_eip_load8_se(cpu);
+				offset = cpu_regist_bx(cpu) + cpu_regist_di(cpu) + mem_eip_load8_se(cpu);
 				break;
 			case 0x02:	// [BP + SI + disp8]
-				offset = cpu_regist_ebp(cpu) + cpu_regist_esi(cpu) + mem_eip_load8_se(cpu);
+				offset = cpu_regist_bp(cpu) + cpu_regist_si(cpu) + mem_eip_load8_se(cpu);
 				break;
 			case 0x03:	// [BP + DI + disp8]
-				offset = cpu_regist_ebp(cpu) + cpu_regist_edi(cpu) + mem_eip_load8_se(cpu);
+				offset = cpu_regist_bp(cpu) + cpu_regist_di(cpu) + mem_eip_load8_se(cpu);
 				break;
 			case 0x04:	// [SI + disp8]
-				offset = cpu_regist_esi(cpu) + mem_eip_load8_se(cpu);
+				offset = cpu_regist_si(cpu) + mem_eip_load8_se(cpu);
 				break;
 			case 0x05:	// [DI + disp8]
-				offset = cpu_regist_edi(cpu) + mem_eip_load8_se(cpu);
+				offset = cpu_regist_di(cpu) + mem_eip_load8_se(cpu);
 				break;
 			case 0x06:	// [BP + disp8]
-				offset = cpu_regist_ebp(cpu) + mem_eip_load8_se(cpu);
+				offset = cpu_regist_bp(cpu) + mem_eip_load8_se(cpu);
 				break;
 			case 0x07:	// [BX + disp8]
-printf("rm 0x07: %x\n", cpu_regist_ebx(cpu));
-				offset = cpu_regist_ebx(cpu) + mem_eip_load8_se(cpu);
+printf("rm 0x07: %x\n", cpu_regist_bx(cpu));
+				offset = cpu_regist_bx(cpu) + mem_eip_load8_se(cpu);
 				break;
 			}
 printf("offset: %x\n", offset);
@@ -583,28 +583,28 @@ printf("offset: %x\n", offset);
 		case 0x02:	// [レジスタ + disp16]
 			switch (rm) {
 			case 0x00:	// [BX + SI + disp16]
-				offset = cpu_regist_ebx(cpu) + cpu_regist_esi(cpu) + mem_eip_load16(cpu);
+				offset = cpu_regist_bx(cpu) + cpu_regist_si(cpu) + mem_eip_load16(cpu);
 				break;
 			case 0x01:	// [BX + DI + disp16]
-				offset = cpu_regist_ebx(cpu) + cpu_regist_edi(cpu) + mem_eip_load16(cpu);
+				offset = cpu_regist_bx(cpu) + cpu_regist_di(cpu) + mem_eip_load16(cpu);
 				break;
 			case 0x02:	// [BP + SI + disp16]
-				offset = cpu_regist_ebp(cpu) + cpu_regist_esi(cpu) + mem_eip_load16(cpu);
+				offset = cpu_regist_bp(cpu) + cpu_regist_si(cpu) + mem_eip_load16(cpu);
 				break;
 			case 0x03:	// [BP + DI + disp16]
-				offset = cpu_regist_ebp(cpu) + cpu_regist_edi(cpu) + mem_eip_load16(cpu);
+				offset = cpu_regist_bp(cpu) + cpu_regist_di(cpu) + mem_eip_load16(cpu);
 				break;
 			case 0x04:	// [SI + disp16]
-				offset = cpu_regist_esi(cpu) + mem_eip_load16(cpu);
+				offset = cpu_regist_si(cpu) + mem_eip_load16(cpu);
 				break;
 			case 0x05:	// [DI + disp16]
-				offset = cpu_regist_edi(cpu) + mem_eip_load16(cpu);
+				offset = cpu_regist_di(cpu) + mem_eip_load16(cpu);
 				break;
 			case 0x06:	// [BP + disp16]
-				offset = cpu_regist_ebp(cpu) + mem_eip_load16(cpu);
+				offset = cpu_regist_bp(cpu) + mem_eip_load16(cpu);
 				break;
 			case 0x07:	// [BX + disp16]
-				offset = cpu_regist_ebx(cpu) + mem_eip_load16(cpu);
+				offset = cpu_regist_bx(cpu) + mem_eip_load16(cpu);
 				break;
 			}
 			result->ptr.voidp = &(cpu->mem[cpu->regs[rm] + offset]);
@@ -812,6 +812,7 @@ void exec_cpux86(CPUx86 *cpu)
 		while (is_prefix) {
 			opcode = mem_eip_load8(cpu);
 			printf("eip: %08X opcode: %X\n", cpu->eip-1, opcode);
+			printf("0x12fc8 : %x %x %x %x\n", cpu->mem[0x12fc8], cpu->mem[0x12fc8+1], cpu->mem[0x12fc8+2], cpu->mem[0x12fc8+3]);
 
 			// prefix
 			switch (opcode) {
@@ -1030,6 +1031,7 @@ printf("modrm reg: %x\n", cpu_modrm_reg(cpu));
 printf("modrm rm: %x\n", cpu_modrm_rm(cpu));
 printf("0xc7 offset: %x\n", ((int)operand1.ptr.voidp) - ((int)cpu->mem));
 printf("0xc7 src: %x %d\n", uintp_val(&operand2), operand2.type);
+printf("0x12fc8 : %x %x %x %x\n", cpu->mem[0x12fc8], cpu->mem[0x12fc8+1], cpu->mem[0x12fc8+2], cpu->mem[0x12fc8+3]);
 					break;
 				default:
 					printf("not mapped opcode: 0xC0 reg %d\n", cpu_modrm_reg(cpu));
