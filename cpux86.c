@@ -85,8 +85,8 @@ typedef struct {
 void cpu_current_reset(CPUx86 *cpu)
 {
 	memset(&(cpu->prefix), 0, sizeof(cpu->prefix));
-	cpu->modrm = 0;
-	cpu->sib = 0;
+	//cpu->modrm = 0;
+	//cpu->sib = 0;
 }
 
 
@@ -330,7 +330,8 @@ uint32 mem_eip_load8_se(CPUx86 *cpu)
 	uint8 val8 = mem_eip_load8(cpu);
 	uint32 val32;
 	if (val8 & 0x80) {
-		val32 = val8 | 0xFFFFFF00;
+		//val32 = val8 | 0xFFFFFF00;
+		val32 = val8 | 0x0000FF00;
 	} else {
 		val32 = val8 & 0x000000FF;
 	}
@@ -393,7 +394,9 @@ uint32 seg_ss(CPUx86 *cpu)
 void mem_eip_load_modrm(CPUx86 *cpu)
 {
 	cpu->modrm = mem_eip_load8(cpu);
-	if (cpu_modrm_mod(cpu)!=3 && cpu_modrm_rm(cpu)==5) {
+	if (cpu_cr0(cpu, CR0_PE) && cpu_modrm_mod(cpu)!=3 && cpu_modrm_rm(cpu)==5) {
+	//if (cpu_modrm_mod(cpu)!=3 && cpu_modrm_rm(cpu)==5) {
+		printf("load sib\n");
 		cpu->sib = mem_eip_load8(cpu);
 	} else {
 		cpu->sib = 0;
@@ -542,7 +545,7 @@ void cpu_modrm_address(CPUx86 *cpu, uintp *result, int use_reg)
 				offset = cpu_regist_ebx(cpu);
 				break;
 			}
-			result->ptr.voidp = &(cpu->mem[offset]);
+			result->ptr.voidp = &(cpu->mem[cpu->regs[rm] + offset]);
 			result->type = cpu->prefix.operand_size ? 2 : 4;
 			break;
 		case 0x01:	// [レジスタ + disp8]
@@ -569,10 +572,12 @@ void cpu_modrm_address(CPUx86 *cpu, uintp *result, int use_reg)
 				offset = cpu_regist_ebp(cpu) + mem_eip_load8_se(cpu);
 				break;
 			case 0x07:	// [BX + disp8]
+printf("rm 0x07: %x\n", cpu_regist_ebx(cpu));
 				offset = cpu_regist_ebx(cpu) + mem_eip_load8_se(cpu);
 				break;
 			}
-			result->ptr.voidp = &(cpu->mem[offset]);
+printf("offset: %x\n", offset);
+			result->ptr.voidp = &(cpu->mem[cpu->regs[rm] + offset]);
 			result->type = cpu->prefix.operand_size ? 2 : 4;
 			break;
 		case 0x02:	// [レジスタ + disp16]
@@ -602,7 +607,7 @@ void cpu_modrm_address(CPUx86 *cpu, uintp *result, int use_reg)
 				offset = cpu_regist_ebx(cpu) + mem_eip_load16(cpu);
 				break;
 			}
-			result->ptr.voidp = &(cpu->mem[offset]);
+			result->ptr.voidp = &(cpu->mem[cpu->regs[rm] + offset]);
 			result->type = cpu->prefix.operand_size ? 2 : 4;
 			break;
 		case 0x03:	// レジスタ
@@ -616,14 +621,35 @@ void cpu_modrm_address(CPUx86 *cpu, uintp *result, int use_reg)
 
 // stack
 
-void stack_push(CPUx86 *cpu, uint32 val)
+void stack_push(CPUx86 *cpu, uintp *val)
 {
-	uintp stack;
-	cpu_regist_esp(cpu) -= 4;
+	uintp dst;
 
-	stack.ptr.voidp = &(cpu->mem[cpu_regist_esp(cpu)]);
-	stack.type = 4;
-	set_uintp_val(&stack, val);
+	if (cpu_cr0(cpu, CR0_PE)) {
+		// stack size is 32bit
+		// todo
+	} else {
+		// stack size is 16bit
+		if (val->type==2) {
+			// operand size is 2byte
+			cpu_regist_esp(cpu) -= 2;
+			//dst.ptr.voidp = &(cpu->mem[seg_ss(cpu) + cpu_regist_esp(cpu)]);
+			dst.ptr.voidp = &(cpu->mem[cpu_regist_esp(cpu)]);
+			dst.type = 2;
+			//set_uintp_val(&dst, val);
+			uintp_val_copy(&dst, val);
+		} else if (val->type==4) {
+			// operand size is 4byte
+			cpu_regist_esp(cpu) -= 4;
+			//dst.ptr.voidp = &(cpu->mem[seg_ss(cpu) + cpu_regist_esp(cpu)]);
+			dst.ptr.voidp = &(cpu->mem[cpu_regist_esp(cpu)]);
+			dst.type = 4;
+			//set_uintp_val(&dst, val);
+			uintp_val_copy(&dst, val);
+			printf("push offset: %x\n", cpu_regist_esp(cpu));
+			printf("push val: %x\n", uintp_val(&dst));
+		}
+	}
 }
 
 void stack_pop(CPUx86 *cpu)
@@ -634,10 +660,14 @@ void stack_pop(CPUx86 *cpu)
 
 // call
 
-void call(CPUx86 *cpu, int32 val)
+void call(CPUx86 *cpu, uintp *val)
 {
-	stack_push(cpu, cpu->eip);
-	cpu->eip = cpu->eip + val;
+	uintp eip;
+	eip.ptr.voidp = &(cpu->eip);
+	eip.type = 4;
+
+	stack_push(cpu, &eip);
+	cpu->eip = cpu->eip + uintp_val(val);
 }
 
 void ret(CPUx86 *cpu, uint32 val)
@@ -846,7 +876,9 @@ void exec_cpux86(CPUx86 *cpu)
 		}
 
 		// opcode
-		if (opcode!=0x0F) {
+		if (opcode==0) {
+			// null
+		} else if (opcode!=0x0F) {
 			// 1byte opcode
 
 			switch (opcode) {
@@ -859,7 +891,9 @@ void exec_cpux86(CPUx86 *cpu)
 			case 0x55:	// 55 sz : push ebp
 			case 0x56:	// 56 sz : push esi
 			case 0x57:	// 57 sz : push edi
-				stack_push(cpu, cpu->regs[opcode & 0x07]);
+				operand1.ptr.voidp = &(cpu->regs[opcode & 0x07]);
+				operand1.type = 4;
+				stack_push(cpu, &operand1);
 				break;
 
 			// 0x80
@@ -914,25 +948,6 @@ void exec_cpux86(CPUx86 *cpu)
 			case 0x89:	// 89 /r sz : mov r/m32 r32
 				mem_eip_load_modrm(cpu);
 				if (is_cpu_modrm_r(cpu)) {
-/*
-					switch (cpu_modrm_mod(cpu)) {
-					case 0x00:
-						printf("todo opcode 0x89 mod 0x00\n");
-						exit(1);
-						break;
-					case 0x01:
-						printf("todo opcode 0x89 mod 0x01\n");
-						exit(1);
-						break;
-					case 0x02:
-						printf("todo opcode 0x89 mod 0x02\n");
-						exit(1);
-						break;
-					case 0x03:
-						cpu->regs[cpu_modrm_rm(cpu)] = cpu->regs[cpu_modrm_reg(cpu)];
-						break;
-					}
-*/
 					// operand1
 					cpu_modrm_address(cpu, &operand1, 0);
 
@@ -948,12 +963,23 @@ void exec_cpux86(CPUx86 *cpu)
 			case 0x8B:	// 8B /r sz : mov r32 r/m32
 				mem_eip_load_modrm(cpu);
 				if (is_cpu_modrm_r(cpu)) {
+printf("============ 0x8b ============\n");
+printf("mod: %x\n", cpu_modrm_mod(cpu));
+printf("reg: %x\n", cpu_modrm_reg(cpu));
+printf("rm : %x\n", cpu_modrm_rm(cpu));
+printf("regs[base]: %x\n", cpu->regs[cpu_modrm_rm(cpu)]);
 					// operand1
 					operand1.ptr.voidp = &(cpu->regs[cpu_modrm_reg(cpu)]);
 					operand1.type = 4;
 
 					// operand2
-					cpu_modrm_address(cpu, &operand2, 1);
+					//cpu_modrm_address(cpu, &operand2, 1);
+					cpu_modrm_address(cpu, &operand2, 0);
+printf("src val: %x\n", uintp_val(&operand2));
+printf("src type: %x\n", operand2.type);
+printf("0xb8 op1 %p\n", operand1.ptr.voidp);
+printf("0xb8 op2 %p\n", operand2.ptr.voidp);
+//dump_cpu(cpu);
 
 					// operator
 					opcode_mov(cpu, &operand1, &operand2);
@@ -997,16 +1023,26 @@ void exec_cpux86(CPUx86 *cpu)
 
 					// operator
 					opcode_mov(cpu, &operand1, &operand2);
+
+printf("========== 0xc7 =========\n");
+printf("modrm mod: %x\n", cpu_modrm_mod(cpu));
+printf("modrm reg: %x\n", cpu_modrm_reg(cpu));
+printf("modrm rm: %x\n", cpu_modrm_rm(cpu));
+printf("0xc7 offset: %x\n", ((int)operand1.ptr.voidp) - ((int)cpu->mem));
+printf("0xc7 src: %x %d\n", uintp_val(&operand2), operand2.type);
 					break;
 				default:
 					printf("not mapped opcode: 0xC0 reg %d\n", cpu_modrm_reg(cpu));
 					break;
 				}
+				return;
 				break;
 
 			// 0xE0
 			case 0xE8:	// E8 cd sz : call rel32
-				call(cpu, mem_eip_load32(cpu));
+				operand1.ptr.voidp = mem_eip_ptr(cpu, 4);
+				operand1.type = 4;
+				call(cpu, &operand1);
 				break;
 
 			// not implemented opcode
@@ -1039,6 +1075,13 @@ int main(void)
 	cpu_regist_eax(cpu) = 0x2000000;
 	cpu_regist_ebx(cpu) = 0x200000;
 	run_cpux86(cpu);
+
+	printf("\n");
+	printf("0x4bf2\n");
+	printf("intval : %x\n", ((int*)cpu->mem)[0x4bf2]);
+	printf("charval: %x\n", ((char*)cpu->mem)[0x4bf2<<2]);
+	printf("intptr : %p\n", &((int*)cpu->mem)[0x4bf2]);
+	printf("charptr: %p\n", &((char*)cpu->mem)[0x4bf2<<2]);
 	delete_cpux86(cpu);
 
 	return 0;
