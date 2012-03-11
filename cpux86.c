@@ -218,7 +218,6 @@ typedef struct {
 		uint32 *uint32p;
 	} ptr;
 	// 1 => uint8
-	// -1 => uint8 符号拡張あり
 	// 2 => uint16
 	// 4 => uint32
 	char type;
@@ -226,30 +225,57 @@ typedef struct {
 
 #define UINTX_INT8		1
 #define UINTX_UINT8		1
-#define UINTX_INT8_SE	-1
-#define UINTX_UINT8_SE	-1
 #define UINTX_INT16		2
 #define UINTX_UINT16	2
 #define UINTX_INT32		4
 #define UINTX_UINT32	4
 
-#define uintp_ptr(u)			( (u)->type==1 ? (u)->ptr.uint8p : \
-								(u)->type==-1 ? (u)->ptr.uint8p : \
-								(u)->type==2 ? (u)->ptr.uint16p : \
-								(u)->ptr.uint32p )
+// 符号拡張されたuint32を返す
+uint32 uintp_val(uintp *p)
+{
+	uint32 val;
+	switch (p->type) {
+	case 1:
+		val = *(p->ptr.uint8p);
+		if (val & 0x80) {
+			val |= 0xFFFFFF00;
+		}
+		break;
+	case 2:
+		val = *(p->ptr.uint16p);
+		if (val & 0x8000) {
+			val |= 0xFFFF0000;
+		}
+		break;
+	case 4:
+		val = *(p->ptr.uint32p);
+		break;
+	}
+	return val;
+}
 
-#define uintp_val(u)			( (u)->type==1 ? *((u)->ptr.uint8p) : \
-								(u)->type==-1 ? (*((u)->ptr.uint8p)&0x80 ? *((u)->ptr.uint8p)|0xFFFFFF00 : *((u)->ptr.uint8p)) : \
-								(u)->type==2 ? *((u)->ptr.uint16p) : \
-								*((u)->ptr.uint32p) )
+// ゼロ拡張されたuint32を返す
+uint32 uintp_val_ze(uintp *p)
+{
+	uint32 val;
+	switch (p->type) {
+	case 1:
+		val = *(p->ptr.uint8p) & 0xFF;
+		break;
+	case 2:
+		val = *(p->ptr.uint16p) & 0xFFFF;
+		break;
+	case 4:
+		val = *(p->ptr.uint32p) & 0xFFFFFFFF;
+		break;
+	}
+	return val;
+}
 
-#define set_uintp_val(u, val)	( (u)->type==1 ? (*((u)->ptr.uint8p)=((val)&0xFF)) : \
-								(u)->type==-1 ? (*((u)->ptr.uint8p)=((val)&0xFF)) : \
-								(u)->type==2 ? (*((u)->ptr.uint16p)=((val)&0xFFFF)) : \
-								(*((u)->ptr.uint32p)=((val)&0xFFFFFFFF)) )
-
+// uintpの値を比較する
 int uintp_cmp(uintp *p1, uintp *p2)
 {
+/*
 	if ((0<p1->type && 0<p2->type) || p1->type==p2->type) {
 		return uintp_val(p1) - uintp_val(p2);
 	}
@@ -266,49 +292,38 @@ int uintp_cmp(uintp *p1, uintp *p2)
 			return uintp_val(p1) - uintp_val(p2);
 		}
 	}
+*/
+	return (int)uintp_val(p1) - (int)uintp_val(p2);
 }
 
-void uintp_val_copy(uintp *dstp, uintp *srcp)
+// srcの値をdstにコピーする
+void uintp_val_copy(uintp *dst, uintp *src)
 {
-	if (dstp->type==1) {
-		if (srcp->type==1) {
-			*(dstp->ptr.uint8p) = *(srcp->ptr.uint8p);
-		} else if (srcp->type==2) {
-			*(dstp->ptr.uint8p) = *(srcp->ptr.uint16p);
-		} else {
-			*(dstp->ptr.uint8p) = *(srcp->ptr.uint32p);
-		}
-	} else if (dstp->type==2) {
-		if (srcp->type==1) {
-			*(dstp->ptr.uint16p) = *(srcp->ptr.uint8p);
-		} else if (srcp->type==2) {
-			*(dstp->ptr.uint16p) = *(srcp->ptr.uint16p);
-		} else {
-			*(dstp->ptr.uint16p) = *(srcp->ptr.uint32p);
-		}
+	if (dst->type==1) {
+		*(dst->ptr.uint8p) = uintp_val(src);
+	} else if (dst->type==2) {
+		*(dst->ptr.uint16p) = uintp_val(src);
 	} else {
-		if (srcp->type==1) {
-			*(dstp->ptr.uint32p) = *(srcp->ptr.uint8p);
-		} else if (srcp->type==2) {
-			*(dstp->ptr.uint32p) = *(srcp->ptr.uint16p);
-		} else {
-			*(dstp->ptr.uint32p) = *(srcp->ptr.uint32p);
-		}
+		*(dst->ptr.uint32p) = uintp_val(src);
 	}
 }
 
-void voidp_val_copy(void *dst, int dstlen, void *src, int srclen)
+// valを符号拡張してdstに代入
+void set_uintp_val(uintp *dst, uint32 val)
 {
-	uintp dstp;
-	uintp srcp;
+	uintp src;
+	src.ptr.voidp = &val;
+	src.type = dst->type;
+	uintp_val_copy(dst, &src);
+}
 
-	dstp.ptr.voidp = dst;
-	dstp.type = dstlen;
-
-	srcp.ptr.voidp = src;
-	srcp.type = srclen;
-
-	uintp_val_copy(&dstp, &srcp);
+// valをゼロ拡張してdstに代入
+void set_uintp_val_ze(uintp *dst, uint32 val)
+{
+	uintp src;
+	src.ptr.voidp = &val;
+	src.type = 4;
+	uintp_val_copy(dst, &src);
 }
 
 
@@ -634,7 +649,6 @@ void stack_push(CPUx86 *cpu, uintp *val)
 			//dst.ptr.voidp = &(cpu->mem[seg_ss(cpu) + cpu_regist_esp(cpu)]);
 			dst.ptr.voidp = &(cpu->mem[cpu_regist_esp(cpu)]);
 			dst.type = 2;
-			//set_uintp_val(&dst, val);
 			uintp_val_copy(&dst, val);
 		} else if (val->type==4) {
 			// operand size is 4byte
@@ -642,31 +656,12 @@ void stack_push(CPUx86 *cpu, uintp *val)
 			//dst.ptr.voidp = &(cpu->mem[seg_ss(cpu) + cpu_regist_esp(cpu)]);
 			dst.ptr.voidp = &(cpu->mem[cpu_regist_esp(cpu)]);
 			dst.type = 4;
-			//set_uintp_val(&dst, val);
 			uintp_val_copy(&dst, val);
 		}
 	}
 }
 
 void stack_pop(CPUx86 *cpu)
-{
-	// todo
-}
-
-
-// call
-
-void call(CPUx86 *cpu, uintp *val)
-{
-	uintp eip;
-	eip.ptr.voidp = &(cpu->eip);
-	eip.type = 4;
-
-	stack_push(cpu, &eip);
-	cpu->eip = cpu->eip + uintp_val(val);
-}
-
-void ret(CPUx86 *cpu, uint32 val)
 {
 	// todo
 }
@@ -695,6 +690,16 @@ void opcode_and(CPUx86 *cpu, uintp *dst, uintp *src)
 	// todo set flag: OF CF SF ZF PF
 }
 
+void opcode_call(CPUx86 *cpu, uintp *val)
+{
+	uintp eip;
+	eip.ptr.voidp = &(cpu->eip);
+	eip.type = 4;
+
+	stack_push(cpu, &eip);
+	cpu->eip = cpu->eip + uintp_val(val);
+}
+
 void opcode_cmp(CPUx86 *cpu, uintp *dst, uintp *src)
 {
 	set_cpu_eflags(cpu, CPU_EFLAGS_ZF, uintp_cmp(dst, src)==0 ? 1 : 0);
@@ -714,6 +719,11 @@ void opcode_mov(CPUx86 *cpu, uintp *dst, uintp *src)
 	set_uintp_val(dst, uintp_val(src));
 }
 
+void opcode_movzx(CPUx86 *cpu, uintp *dst, uintp *src)
+{
+	set_uintp_val(dst, uintp_val_ze(src));
+}
+
 void opcode_sbb(CPUx86 *cpu, uintp *dst, uintp *src)
 {
 	set_uintp_val(dst, uintp_val(dst) - uintp_val(src) - cpu_eflags(cpu, CPU_EFLAGS_CF));
@@ -726,6 +736,11 @@ void opcode_sub(CPUx86 *cpu, uintp *dst, uintp *src)
 	set_uintp_val(dst, uintp_val(dst) - uintp_val(src));
 
 	// todo set flag: OF SF ZF AF PF CF
+}
+
+void opcode_test(CPUx86 *cpu, uintp *src1, uintp *src2)
+{
+	// todo
 }
 
 void opcode_xor(CPUx86 *cpu, uintp *dst, uintp *src)
@@ -799,7 +814,7 @@ void exec_cpux86(CPUx86 *cpu)
 	uintp operand1;
 	uintp operand2;
 
-	while (c++<20) {
+	while (c++<30) {
 		dump_cpu(cpu);
 
 		cpu_current_reset(cpu);
@@ -915,7 +930,8 @@ void exec_cpux86(CPUx86 *cpu)
 
 				// src immediate
 				operand2.ptr.voidp = mem_eip_ptr(cpu, 1);
-				operand2.type = -1;
+				//operand2.type = -1;
+				operand2.type = 1;
 
 				// operation
 				switch (cpu_modrm_reg(cpu)) {
@@ -944,6 +960,23 @@ void exec_cpux86(CPUx86 *cpu)
 					opcode_cmp(cpu, &operand1, &operand2);
 					break;
 				}
+				break;
+			case 0x84:	// 84 /r : test r/m8 r8
+				// modrm
+				mem_eip_load_modrm(cpu);
+printf("0x84 mod: %x\n", cpu_modrm_mod(cpu));
+printf("0x84 reg: %x\n", cpu_modrm_reg(cpu));
+printf("0x84 rm : %x\n", cpu_modrm_rm(cpu));
+
+				// src1 register/memory
+				cpu_modrm_address(cpu, &operand1, 0);
+
+				// src2 regisetr
+				operand2.ptr.voidp = &(cpu->regs[cpu_modrm_rm(cpu)]);
+				operand2.type = 1;
+
+				// operation
+				opcode_test(cpu, &operand1, &operand2);
 				break;
 			case 0x89:	// 89 /r sz : mov r/m32 r32
 				mem_eip_load_modrm(cpu);
@@ -1025,7 +1058,9 @@ void exec_cpux86(CPUx86 *cpu)
 				// src relative address
 				operand1.ptr.voidp = mem_eip_ptr(cpu, 4);
 				operand1.type = 4;
-				call(cpu, &operand1);
+
+				// operation
+				opcode_call(cpu, &operand1);
 				break;
 
 			// not implemented opcode
@@ -1034,9 +1069,29 @@ void exec_cpux86(CPUx86 *cpu)
 				exit(1);
 			}
 		} else {
+			opcode = mem_eip_load8(cpu);
+
 			// 2byte opcode
-			printf("not implemented opcode: 0x%X\n", opcode);
-			exit(1);
+			switch (opcode) {
+			case 0xB6:	// 0F B6 /r sz : movzx r32 r/m8
+				mem_eip_load_modrm(cpu);
+				//if (is_cpu_modrm_r(cpu)) {
+					// dst register
+					operand1.ptr.voidp = &(cpu->regs[cpu_modrm_reg(cpu)]);
+					operand1.type = 4;
+
+					// src register/memory
+					cpu_modrm_address(cpu, &operand2, 0);
+					operand2.type = 1;
+
+					// operation
+					opcode_movzx(cpu, &operand1, &operand2);
+				//}
+				break;
+			default:
+				printf("not implemented opcode: 0x%X\n", opcode);
+				exit(1);
+			}
 		}
 	}
 }
@@ -1058,13 +1113,6 @@ int main(void)
 	cpu_regist_eax(cpu) = 0x2000000;
 	cpu_regist_ebx(cpu) = 0x200000;
 	run_cpux86(cpu);
-
-	printf("\n");
-	printf("0x4bf2\n");
-	printf("intval : %x\n", ((int*)cpu->mem)[0x4bf2]);
-	printf("charval: %x\n", ((char*)cpu->mem)[0x4bf2<<2]);
-	printf("intptr : %p\n", &((int*)cpu->mem)[0x4bf2]);
-	printf("charptr: %p\n", &((char*)cpu->mem)[0x4bf2<<2]);
 	delete_cpux86(cpu);
 
 	return 0;
