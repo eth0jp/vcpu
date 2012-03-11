@@ -707,9 +707,33 @@ void opcode_cmp(CPUx86 *cpu, uintp *dst, uintp *src)
 	// todo set flag: CF OF SF ZF AF PF
 }
 
+void opcode_jmp_short(CPUx86 *cpu, uintp *rel)
+{
+	cpu->eip += (int)uintp_val(rel);
+}
+
 void opcode_jz(CPUx86 *cpu, uintp *rel)
 {
-	// todo
+	if (cpu_eflags(cpu, CPU_EFLAGS_ZF)) {
+		cpu->eip += uintp_val(rel);
+		if (rel->type==2) {
+			cpu->eip &= 0xFFFF;
+		} else if (rel->type==4) {
+			// todo
+		}
+	}
+}
+
+void opcode_jnz(CPUx86 *cpu, uintp *rel)
+{
+	if (cpu_eflags(cpu, CPU_EFLAGS_ZF)) {
+		cpu->eip += uintp_val(rel);
+		if (rel->type==2) {
+			cpu->eip &= 0xFFFF;
+		} else if (rel->type==4) {
+			// todo
+		}
+	}
 }
 
 void opcode_or(CPUx86 *cpu, uintp *dst, uintp *src)
@@ -720,6 +744,11 @@ void opcode_or(CPUx86 *cpu, uintp *dst, uintp *src)
 }
 
 void opcode_mov(CPUx86 *cpu, uintp *dst, uintp *src)
+{
+	set_uintp_val(dst, uintp_val(src));
+}
+
+void opcode_movsx(CPUx86 *cpu, uintp *dst, uintp *src)
 {
 	set_uintp_val(dst, uintp_val(src));
 }
@@ -925,6 +954,14 @@ void exec_cpux86(CPUx86 *cpu)
 				opcode_jz(cpu, &operand1);
 				break;
 
+			case 0x75:	// 75 cb : jnz rel8
+				//relative address
+				operand1.ptr.voidp = mem_eip_ptr(cpu, 1);
+				operand1.type = 1;
+
+				// operation
+				opcode_jnz(cpu, &operand1);
+
 			// 0x80
 			case 0x83:
 				// 83 /0 ib sz : add r/m32 imm8
@@ -978,9 +1015,6 @@ void exec_cpux86(CPUx86 *cpu)
 			case 0x84:	// 84 /r : test r/m8 r8
 				// modrm
 				mem_eip_load_modrm(cpu);
-printf("0x84 mod: %x\n", cpu_modrm_mod(cpu));
-printf("0x84 reg: %x\n", cpu_modrm_reg(cpu));
-printf("0x84 rm : %x\n", cpu_modrm_rm(cpu));
 
 				// src1 register/memory
 				cpu_modrm_address(cpu, &operand1, 0);
@@ -1077,6 +1111,14 @@ printf("0x84 rm : %x\n", cpu_modrm_rm(cpu));
 				opcode_call(cpu, &operand1);
 				break;
 
+			case 0xEB:	// EB cb : jmp rel8
+				operand1.ptr.voidp = mem_eip_ptr(cpu, 1);
+				operand1.type = 1;
+
+				// operation
+				opcode_jmp_short(cpu, &operand1);
+				break;
+
 			// not implemented opcode
 			default:
 				printf("not implemented opcode: 0x%02X\n", opcode);
@@ -1102,6 +1144,22 @@ printf("0x84 rm : %x\n", cpu_modrm_rm(cpu));
 				// operation
 				opcode_movzx(cpu, &operand1, &operand2);
 				break;
+
+			case 0xBE:	// 0F BE /r sz : movsx r32 r/m8
+				// modrm
+				mem_eip_load_modrm(cpu);
+
+				// dst register
+				operand1.ptr.voidp = &(cpu->regs[cpu_modrm_reg(cpu)]);
+
+				// src register/memory
+				cpu_modrm_address(cpu, &operand2, 0);
+				operand2.type = 1;
+
+				// operation
+				opcode_movsx(cpu, &operand1, &operand2);
+				break;
+
 			default:
 				printf("not implemented opcode: 0x0F%02X\n", opcode);
 				exit(1);
