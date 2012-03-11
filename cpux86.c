@@ -736,6 +736,13 @@ void opcode_jnz(CPUx86 *cpu, uintp *rel)
 	}
 }
 
+void opcode_out(CPUx86 *cpu, uintp *port, uintp *val)
+{
+	// todo
+
+	printf("out: %x\n", uintp_val(val));
+}
+
 void opcode_or(CPUx86 *cpu, uintp *dst, uintp *src)
 {
 	set_uintp_val(dst, uintp_val(dst) | uintp_val(src));
@@ -848,7 +855,7 @@ void exec_cpux86(CPUx86 *cpu)
 	uintp operand1;
 	uintp operand2;
 
-	while (c++<30) {
+	while (c++<40) {
 		dump_cpu(cpu);
 
 		cpu_current_reset(cpu);
@@ -1112,11 +1119,25 @@ void exec_cpux86(CPUx86 *cpu)
 				break;
 
 			case 0xEB:	// EB cb : jmp rel8
+				// src relative address
 				operand1.ptr.voidp = mem_eip_ptr(cpu, 1);
 				operand1.type = 1;
 
 				// operation
 				opcode_jmp_short(cpu, &operand1);
+				break;
+
+			case 0xEE:	// EE : out dx al
+				// output port
+				operand1.ptr.voidp = &(cpu_regist_edx(cpu));
+				operand1.type = 2;
+
+				// output data
+				operand2.ptr.voidp = &(cpu_regist_eax(cpu));
+				operand2.type = 1;
+
+				// operation
+				opcode_out(cpu, &operand1, &operand2);
 				break;
 
 			// not implemented opcode
@@ -1126,6 +1147,7 @@ void exec_cpux86(CPUx86 *cpu)
 			}
 		} else {
 			opcode = mem_eip_load8(cpu);
+			printf("opcode: %X\n", opcode);
 
 			// 2byte opcode
 			switch (opcode) {
@@ -1151,6 +1173,7 @@ void exec_cpux86(CPUx86 *cpu)
 
 				// dst register
 				operand1.ptr.voidp = &(cpu->regs[cpu_modrm_reg(cpu)]);
+				operand1.type = 4;
 
 				// src register/memory
 				cpu_modrm_address(cpu, &operand2, 0);
