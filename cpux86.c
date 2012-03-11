@@ -707,6 +707,11 @@ void opcode_cmp(CPUx86 *cpu, uintp *dst, uintp *src)
 	// todo set flag: CF OF SF ZF AF PF
 }
 
+void opcode_jz(CPUx86 *cpu, uintp *rel)
+{
+	// todo
+}
+
 void opcode_or(CPUx86 *cpu, uintp *dst, uintp *src)
 {
 	set_uintp_val(dst, uintp_val(dst) | uintp_val(src));
@@ -823,7 +828,6 @@ void exec_cpux86(CPUx86 *cpu)
 		while (is_prefix) {
 			opcode = mem_eip_load8(cpu);
 			printf("eip: %08X opcode: %X\n", cpu->eip-1, opcode);
-			printf("0x12fc8 : %x %x %x %x\n", cpu->mem[0x12fc8], cpu->mem[0x12fc8+1], cpu->mem[0x12fc8+2], cpu->mem[0x12fc8+3]);
 
 			// prefix
 			switch (opcode) {
@@ -909,6 +913,16 @@ void exec_cpux86(CPUx86 *cpu)
 
 				// operation
 				stack_push(cpu, &operand1);
+				break;
+
+			// 70
+			case 0x74:	// 74 cb : jz rel8
+				// relative address
+				operand1.ptr.voidp = mem_eip_ptr(cpu, 1);
+				operand1.type = 1;
+
+				// operation
+				opcode_jz(cpu, &operand1);
 				break;
 
 			// 0x80
@@ -1065,7 +1079,7 @@ printf("0x84 rm : %x\n", cpu_modrm_rm(cpu));
 
 			// not implemented opcode
 			default:
-				printf("not implemented opcode: 0x%X\n", opcode);
+				printf("not implemented opcode: 0x%02X\n", opcode);
 				exit(1);
 			}
 		} else {
@@ -1089,7 +1103,7 @@ printf("0x84 rm : %x\n", cpu_modrm_rm(cpu));
 				opcode_movzx(cpu, &operand1, &operand2);
 				break;
 			default:
-				printf("not implemented opcode: 0x%X\n", opcode);
+				printf("not implemented opcode: 0x0F%02X\n", opcode);
 				exit(1);
 			}
 		}
