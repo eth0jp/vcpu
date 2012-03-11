@@ -1074,19 +1074,19 @@ printf("0x84 rm : %x\n", cpu_modrm_rm(cpu));
 			// 2byte opcode
 			switch (opcode) {
 			case 0xB6:	// 0F B6 /r sz : movzx r32 r/m8
+				// modrm
 				mem_eip_load_modrm(cpu);
-				//if (is_cpu_modrm_r(cpu)) {
-					// dst register
-					operand1.ptr.voidp = &(cpu->regs[cpu_modrm_reg(cpu)]);
-					operand1.type = 4;
 
-					// src register/memory
-					cpu_modrm_address(cpu, &operand2, 0);
-					operand2.type = 1;
+				// dst register
+				operand1.ptr.voidp = &(cpu->regs[cpu_modrm_reg(cpu)]);
+				operand1.type = 4;
 
-					// operation
-					opcode_movzx(cpu, &operand1, &operand2);
-				//}
+				// src register/memory
+				cpu_modrm_address(cpu, &operand2, 0);
+				operand2.type = 1;
+
+				// operation
+				opcode_movzx(cpu, &operand1, &operand2);
 				break;
 			default:
 				printf("not implemented opcode: 0x%X\n", opcode);
