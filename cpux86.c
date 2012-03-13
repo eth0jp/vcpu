@@ -977,6 +977,23 @@ void exec_cpux86(CPUx86 *cpu)
 			// 1byte opcode
 
 			switch (opcode) {
+			// 0x00
+			case 0x00:	// 00 /r : add r/m8 r8
+				// modrm
+				mem_eip_load_modrm(cpu);
+
+				// dst register/memory
+				cpu_modrm_address(cpu, &operand1, 0);
+				operand1.type = 1;
+
+				// src register
+				operand2.ptr.voidp = &(cpu->regs[cpu_modrm_reg(cpu)]);
+				operand2.type = 1;
+
+				// operation
+				opcode_add(cpu, &operand1, &operand2);
+				break;
+
 			// 0x50
 			case 0x50:	// 50 sz : push eax
 			case 0x51:	// 51 sz : push ecx
@@ -1107,6 +1124,29 @@ void exec_cpux86(CPUx86 *cpu)
 				break;
 
 			// 0xB0
+			case 0xB0:	// B0 : mov al,imm8
+			case 0xB1:	// B1 : mov cl,imm8
+			case 0xB2:	// B2 : mov dl,imm8
+			case 0xB3:	// B3 : mov bl,imm8
+			case 0xB4:	// B4 : mov ah,imm8
+			case 0xB5:	// B5 : mov ch,imm8
+			case 0xB6:	// B6 : mov dh,imm8
+			case 0xB7:	// B7 : mov bh,imm8
+				// dst register
+				operand1.ptr.voidp = &(cpu->regs[opcode & 0x03]);
+				if (4<=(opcode & 0x07)) {
+					operand1.ptr.uint8p++;
+				}
+				operand1.type = 1;
+
+				// src immediate
+				operand2.ptr.voidp = mem_eip_ptr(cpu, 1);
+				operand2.type = 1;
+
+				// operation
+				opcode_mov(cpu, &operand1, &operand2);
+				break;
+
 			case 0xB8:	// B8 sz : mov eax imm32
 			case 0xB9:	// B9 sz : mov ecx imm32
 			case 0xBA:	// BA sz : mov edx imm32
