@@ -746,6 +746,18 @@ void opcode_jnz(CPUx86 *cpu, uintp *rel)
 	}
 }
 
+void opcode_js(CPUx86 *cpu, uintp *rel)
+{
+	if (cpu_eflags(cpu, CPU_EFLAGS_SF)) {
+		cpu->eip += uintp_val(rel);
+		if (rel->type==2) {
+			cpu->eip &= 0xFFFF;
+		} else if (rel->type==4) {
+			// todo
+		}
+	}
+}
+
 void opcode_out(CPUx86 *cpu, uintp *port, uintp *val)
 {
 	// todo
@@ -917,7 +929,7 @@ void exec_cpux86(CPUx86 *cpu)
 	uintp operand1;
 	uintp operand2;
 
-	while (c++<50) {
+	while (c++<100) {
 		dump_cpu(cpu);
 
 		cpu_current_reset(cpu);
@@ -1037,7 +1049,23 @@ void exec_cpux86(CPUx86 *cpu)
 				opcode_push(cpu, &operand1);
 				break;
 
-			// 70
+			case 0x58:	// 58 sz : pop eax
+			case 0x59:	// 59 sz : pop ecx
+			case 0x5A:	// 5A sz : pop edx
+			case 0x5B:	// 5B sz : pop ebx
+			case 0x5C:	// 5C sz : pop esp
+			case 0x5D:	// 5D sz : pop ebp
+			case 0x5E:	// 5E sz : pop esi
+			case 0x5F:	// 5F sz : pop edi
+				// dst register
+				operand1.ptr.voidp = &(cpu->regs[opcode & 0x07]);
+				operand1.type = 4;
+
+				// operation
+				opcode_pop(cpu, &operand1);
+				break;
+
+			// 0x70
 			case 0x74:	// 74 cb : jz rel8
 				// relative address
 				operand1.ptr.voidp = mem_eip_ptr(cpu, 1);
@@ -1048,12 +1076,22 @@ void exec_cpux86(CPUx86 *cpu)
 				break;
 
 			case 0x75:	// 75 cb : jnz rel8
-				//relative address
+				// relative address
 				operand1.ptr.voidp = mem_eip_ptr(cpu, 1);
 				operand1.type = 1;
 
 				// operation
 				opcode_jnz(cpu, &operand1);
+				break;
+
+			case 0x78:	// 78 cb : js rel8
+				// relative address
+				operand1.ptr.voidp = mem_eip_ptr(cpu, 1);
+				operand1.type = 1;
+
+				// operation
+				opcode_js(cpu, &operand1);
+				break;
 
 			// 0x80
 			case 0x83:
