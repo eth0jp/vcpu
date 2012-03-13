@@ -678,7 +678,10 @@ void opcode_adc(CPUx86 *cpu, uintp *dst, uintp *src)
 
 void opcode_add(CPUx86 *cpu, uintp *dst, uintp *src)
 {
-	set_uintp_val(dst, uintp_val(dst) + uintp_val(src));
+	uint32 val;
+
+	val = uintp_val(dst) + uintp_val(src);
+	set_uintp_val(dst, val);
 
 	// todo set flag: OF SF ZF AF CF PF
 }
@@ -700,11 +703,53 @@ void opcode_call(CPUx86 *cpu, uintp *val)
 	cpu->eip = cpu->eip + uintp_val(val);
 }
 
+void opcode_cli(CPUx86 *cpu)
+{
+	if (cpu_cr0(cpu, CR0_PE)) {
+		// Reset Interrupt Flag
+		set_cpu_eflags(cpu, CPU_EFLAGS_IF, 0);
+	} else {
+		if (!cpu_cr0(cpu, CPU_EFLAGS_VM)) {
+			// todo
+			// CPL???
+		} else {
+			if (cpu_cr0(cpu, CPU_EFLAGS_IOPL)==3) {
+				// Reset Interrupt Flag
+				set_cpu_eflags(cpu, CPU_EFLAGS_IF, 0);
+			} else {
+				//if (cpu_eflags(cpu, CPU_EFLAGS_IOPL)<3 && VME)
+				// todo
+			}
+		}
+	}
+}
+
 void opcode_cmp(CPUx86 *cpu, uintp *dst, uintp *src)
 {
 	set_cpu_eflags(cpu, CPU_EFLAGS_ZF, uintp_cmp(dst, src)==0 ? 1 : 0);
 
 	// todo set flag: CF OF SF ZF AF PF
+}
+
+void opcode_dec(CPUx86 *cpu, uintp *target)
+{
+	set_uintp_val(target, uintp_val(target) - 1);
+}
+
+void opcode_in(CPUx86 *cpu, uintp *src)
+{
+	// todo
+	//cpu_regist_eax(cpu) = 
+}
+
+void opcode_inc(CPUx86 *cpu, uintp *target)
+{
+	set_uintp_val(target, uintp_val(target) + 1);
+}
+
+void opcode_into(CPUx86 *cpu)
+{
+	// todo
 }
 
 void opcode_jmp_short(CPUx86 *cpu, uintp *rel)
@@ -928,9 +973,7 @@ void exec_cpux86(CPUx86 *cpu)
 		}
 
 		// opcode
-		if (opcode==0) {
-			// null
-		} else if (opcode!=0x0F) {
+		if (opcode!=0x0F) {
 			// 1byte opcode
 
 			switch (opcode) {
@@ -1108,6 +1151,10 @@ void exec_cpux86(CPUx86 *cpu)
 				}
 				break;
 
+			case 0xCE:	// CE : into
+				opcode_into(cpu);
+				break;
+
 			// 0xE0
 			case 0xE8:	// E8 cd sz : call rel32
 				// src relative address
@@ -1127,6 +1174,15 @@ void exec_cpux86(CPUx86 *cpu)
 				opcode_jmp_short(cpu, &operand1);
 				break;
 
+			case 0xED:	// ED sz : in eax dx
+				// src
+				operand1.ptr.voidp = &(cpu_regist_edx(cpu));
+				operand1.type = cpu_operand_size(cpu);
+
+				// operation
+				opcode_in(cpu, &operand1);
+				break;
+
 			case 0xEE:	// EE : out dx al
 				// output port
 				operand1.ptr.voidp = &(cpu_regist_edx(cpu));
@@ -1138,6 +1194,36 @@ void exec_cpux86(CPUx86 *cpu)
 
 				// operation
 				opcode_out(cpu, &operand1, &operand2);
+				break;
+
+			case 0xFA:	// FA : cli
+				opcode_cli(cpu);
+				break;
+
+			case 0xFE:
+				mem_eip_load_modrm(cpu);
+
+				switch (cpu_modrm_reg(cpu)) {
+				case 0:	// FE /0 : inc r/m8
+					// target
+					cpu_modrm_address(cpu, &operand1, 0);
+					operand1.type = 1;
+
+					// operation
+					opcode_inc(cpu, &operand1);
+					break;
+				case 1:	// FE /1 : dec r/m8
+					// target
+					cpu_modrm_address(cpu, &operand1, 0);
+					operand1.type = 1;
+
+					// operation
+					opcode_dec(cpu, &operand1);
+					break;
+				default:
+					printf("not mapped opcode: 0xFE reg %d\n", cpu_modrm_reg(cpu));
+					break;
+				}
 				break;
 
 			// not implemented opcode
@@ -1201,12 +1287,16 @@ int main(void)
 	CPUx86 *cpu;
 
 	cpu = new_cpux86(1024*1024*32);
+/*
 	mem_store_file(cpu, 0x00100000, "../jslinux/files/vmlinux26.bin");
 	mem_store_file(cpu, 0x00400000, "../jslinux/files/root.bin");
 	mem_store_file(cpu, 0x10000, "../jslinux/files/linuxstart.bin");
 	cpu->eip = 0x10000;
 	cpu_regist_eax(cpu) = 0x2000000;
 	cpu_regist_ebx(cpu) = 0x200000;
+*/
+	mem_store_file(cpu, 0x00, "./asm/bootstrap.o");
+    cpu->eip = 0x00;
 	run_cpux86(cpu);
 	delete_cpux86(cpu);
 
