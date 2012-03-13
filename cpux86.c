@@ -1023,6 +1023,22 @@ void exec_cpux86(CPUx86 *cpu)
 				opcode_add(cpu, &operand1, &operand2);
 				break;
 
+			case 0x02:	// 02 /r : add r8 r/m8
+				// modrm
+				mem_eip_load_modrm(cpu);
+
+				// dst register
+				operand1.ptr.voidp = &(cpu->regs[cpu_modrm_reg(cpu)]);
+				operand1.type = 1;
+
+				// src register/memory
+				cpu_modrm_address(cpu, &operand2, 0);
+				operand2.type = 1;
+
+				// operation
+				opcode_add(cpu, &operand1, &operand2);
+				break;
+
 			case 0x07:	// 07 : pop es
 				// dst register
 				operand1.ptr.voidp = &(cpu->es);
