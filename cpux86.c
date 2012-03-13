@@ -282,30 +282,6 @@ uint32 uintp_val_ze(uintp *p)
 	return val;
 }
 
-// uintpの値を比較する
-int uintp_cmp(uintp *p1, uintp *p2)
-{
-/*
-	if ((0<p1->type && 0<p2->type) || p1->type==p2->type) {
-		return uintp_val(p1) - uintp_val(p2);
-	}
-	if (p1->type==-1) {
-		if (p2->type==2) {
-			return (uintp_val(p1) & 0xFFFF) - uintp_val(p2);
-		} else {
-			return uintp_val(p1) - uintp_val(p2);
-		}
-	} else {
-		if (p1->type==2) {
-			return uintp_val(p1) - (uintp_val(p2) & 0xFFFF);
-		} else {
-			return uintp_val(p1) - uintp_val(p2);
-		}
-	}
-*/
-	return (int)uintp_val(p1) - (int)uintp_val(p2);
-}
-
 // srcの値をdstにコピーする
 void uintp_val_copy(uintp *dst, uintp *src)
 {
@@ -334,6 +310,15 @@ void set_uintp_val_ze(uintp *dst, uint32 val)
 	src.ptr.voidp = &val;
 	src.type = 4;
 	uintp_val_copy(dst, &src);
+}
+
+// 立っているビット数を数える
+int bit_count8(uint8 val)
+{
+	uint8 count;
+	count = (val & 0x55) + ((val >> 1) & 0x55);
+    count = (count & 0x33) + ((count >> 2) & 0x33);
+    return (count & 0x0f) + ((count >> 4) & 0x0f);
 }
 
 
@@ -667,18 +652,55 @@ void opcode_adc(CPUx86 *cpu, uintp *dst, uintp *src)
 void opcode_add(CPUx86 *cpu, uintp *dst, uintp *src)
 {
 	uint32 val;
-
 	val = uintp_val(dst) + uintp_val(src);
+
+	// OF CF
+	if (uintp_val(dst) != val-uintp_val(src)) {
+		set_cpu_eflags(cpu, CPU_EFLAGS_OF, 1);
+		set_cpu_eflags(cpu, CPU_EFLAGS_CF, 1);
+	} else {
+		set_cpu_eflags(cpu, CPU_EFLAGS_OF, 0);
+		set_cpu_eflags(cpu, CPU_EFLAGS_CF, 0);
+	}
+
+	// PF
+	set_cpu_eflags(cpu, CPU_EFLAGS_PF, (bit_count8(val) & 0x01) ? 0 : 1);
+
+	// AF
+	//set_cpu_eflags(cpu, CPU_EFLAGS_AF, )
+
+	// ZF
+	set_cpu_eflags(cpu, CPU_EFLAGS_ZF, val==0 ? 1 : 0);
+
+	// SF
+	set_cpu_eflags(cpu, CPU_EFLAGS_SF, 0<=(int)val ? 0 : 1);
+
 	set_uintp_val(dst, val);
 
-	// todo set flag: OF SF ZF AF CF PF
+	// todo set flag: AF
 }
 
 void opcode_and(CPUx86 *cpu, uintp *dst, uintp *src)
 {
-	set_uintp_val(dst, uintp_val(dst) & uintp_val(src));
+	uint32 val;
+	val = uintp_val(dst) & uintp_val(src);
+	set_uintp_val(dst, val);
 
-	// todo set flag: OF CF SF ZF PF
+	// OF
+	set_cpu_eflags(cpu, CPU_EFLAGS_OF, 0);
+
+	// CF
+	set_cpu_eflags(cpu, CPU_EFLAGS_CF, 0);
+
+	// PF
+	set_cpu_eflags(cpu, CPU_EFLAGS_PF, (bit_count8(val) & 0x01) ? 0 : 1);
+
+	// ZF
+	set_cpu_eflags(cpu, CPU_EFLAGS_ZF, val==0 ? 1 : 0);
+
+	// SF
+	set_cpu_eflags(cpu, CPU_EFLAGS_SF, 0<=(int)val ? 0 : 1);
+
 }
 
 void opcode_call(CPUx86 *cpu, uintp *val)
@@ -712,11 +734,15 @@ void opcode_cli(CPUx86 *cpu)
 	}
 }
 
-void opcode_cmp(CPUx86 *cpu, uintp *dst, uintp *src)
+void opcode_cmp(CPUx86 *cpu, uintp *src1, uintp *src2)
 {
-	set_cpu_eflags(cpu, CPU_EFLAGS_ZF, uintp_cmp(dst, src)==0 ? 1 : 0);
+	uint32 temp_val;
+	uintp temp;
+	temp.ptr.voidp = &temp_val;
+	temp.type = src1->type;
+	uintp_val_copy(&temp, src1);
 
-	// todo set flag: CF OF SF ZF AF PF
+	opcode_sub(cpu, &temp, src2);
 }
 
 void opcode_dec(CPUx86 *cpu, uintp *target)
@@ -795,9 +821,24 @@ void opcode_out(CPUx86 *cpu, uintp *port, uintp *val)
 
 void opcode_or(CPUx86 *cpu, uintp *dst, uintp *src)
 {
-	set_uintp_val(dst, uintp_val(dst) | uintp_val(src));
+	uint32 val;
+	val = uintp_val(dst) | uintp_val(src);
+	set_uintp_val(dst, val);
 
-	// todo set flag: OF CF SF ZF PF
+	// OF
+	set_cpu_eflags(cpu, CPU_EFLAGS_OF, 0);
+
+	// CF
+	set_cpu_eflags(cpu, CPU_EFLAGS_CF, 0);
+
+	// PF
+	set_cpu_eflags(cpu, CPU_EFLAGS_PF, (bit_count8(val) & 0x01) ? 0 : 1);
+
+	// ZF
+	set_cpu_eflags(cpu, CPU_EFLAGS_ZF, val==0 ? 1 : 0);
+
+	// SF
+	set_cpu_eflags(cpu, CPU_EFLAGS_SF, 0<=(int)val ? 0 : 1);
 }
 
 void opcode_pop(CPUx86 *cpu, uintp *dst)
@@ -876,9 +917,28 @@ void opcode_sbb(CPUx86 *cpu, uintp *dst, uintp *src)
 
 void opcode_sub(CPUx86 *cpu, uintp *dst, uintp *src)
 {
-	set_uintp_val(dst, uintp_val(dst) - uintp_val(src));
+	uint32 val;
+	val = uintp_val(dst) - uintp_val(src);
 
-	// todo set flag: OF SF ZF AF PF CF
+	// OF CF
+	if (uintp_val(dst) != val+uintp_val(src)) {
+		set_cpu_eflags(cpu, CPU_EFLAGS_OF, 1);
+		set_cpu_eflags(cpu, CPU_EFLAGS_CF, 1);
+	} else {
+		set_cpu_eflags(cpu, CPU_EFLAGS_OF, 0);
+		set_cpu_eflags(cpu, CPU_EFLAGS_CF, 0);
+	}
+
+	// PF
+	set_cpu_eflags(cpu, CPU_EFLAGS_PF, (bit_count8(val) & 0x01) ? 0 : 1);
+
+	// ZF
+	set_cpu_eflags(cpu, CPU_EFLAGS_ZF, val==0 ? 1 : 0);
+
+	// SF
+	set_cpu_eflags(cpu, CPU_EFLAGS_SF, 0<=(int)val ? 0 : 1);
+
+	set_uintp_val(dst, val);
 }
 
 void opcode_test(CPUx86 *cpu, uintp *src1, uintp *src2)
@@ -888,9 +948,24 @@ void opcode_test(CPUx86 *cpu, uintp *src1, uintp *src2)
 
 void opcode_xor(CPUx86 *cpu, uintp *dst, uintp *src)
 {
-	set_uintp_val(dst, uintp_val(dst) ^ uintp_val(src));
+	uint32 val;
+	val = uintp_val(dst) ^ uintp_val(src);
+	set_uintp_val(dst, val);
 
-	// todo set flag: OF CF SF ZF PF
+	// OF
+	set_cpu_eflags(cpu, CPU_EFLAGS_OF, 0);
+
+	// CF
+	set_cpu_eflags(cpu, CPU_EFLAGS_CF, 0);
+
+	// PF
+	set_cpu_eflags(cpu, CPU_EFLAGS_PF, (bit_count8(val) & 0x01) ? 0 : 1);
+
+	// ZF
+	set_cpu_eflags(cpu, CPU_EFLAGS_ZF, val==0 ? 1 : 0);
+
+	// SF
+	set_cpu_eflags(cpu, CPU_EFLAGS_SF, 0<=(int)val ? 0 : 1);
 }
 
 
@@ -1142,11 +1217,11 @@ void exec_cpux86(CPUx86 *cpu)
 				break;
 
 			case 0x3C:	// 3C ib : cmp al imm8
-				// dst register
+				// src1 register
 				operand1.ptr.voidp = &(cpu_regist_eax(cpu));
 				operand1.type = 1;
 
-				// src immediate
+				// src2 immediate
 				operand2.ptr.voidp = mem_eip_ptr(cpu, 1);
 				operand2.type = 1;
 
