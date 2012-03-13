@@ -1,244 +1,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-typedef char int8;
-typedef short int16;
-typedef int int32;
-
-typedef unsigned char uint8;
-typedef unsigned short uint16;
-typedef unsigned int uint32;
-
-
-// Descriptor Table Register
-
-typedef struct {
-	uint16 limit;	// Table Limit
-	uint32 base;	// Linear Base Address
-} DescTableReg;
-
-
-// CPUx86
-
-typedef struct {
-	// 一般レジスタ群
-	// 汎用レジスタ
-	// regs[0]: eax アキュムレータ
-	// regs[1]: ecx カウンタ
-	// regs[2]: edx データ
-	// regs[3]: ebx ベース
-	// regs[4]: esp スタックポインタ
-	// regs[5]: ebp スタックベースポインタ
-	// regs[6]: esi ソース
-	// regs[7]: edi デスティネーション
-	uint32 regs[8];
-	// セグメントレジスタ
-	uint16 ss;	// スタックセグメント
-	uint16 cs;	// コードセグメント
-	uint16 ds;	// データセグメント
-	uint16 es;	// エクストラセグメント
-	uint16 fs;	// Fセグメント
-	uint16 gs;	// Gセグメント
-	// EFLAGSレジスタ
-	uint32 eflags;
-	// 命令ポインタ
-	uint32 eip;
-
-	// システムレジスタ群
-	// システムアドレスレジスタ
-	DescTableReg gdtr;	// Global Descriptor Table Register
-	DescTableReg idtr;	// Interrupt Descriptor Table Register
-	uint16 ldtr;		// Local Descriptor Table
-	uint16 tr;
-	// コントロールレジスタ
-	uint32 cr0;
-	uint32 cr1;
-	uint32 cr2;
-	uint32 cr3;
-
-	// メモリ
-	uint8 *mem;
-	size_t mem_size;
-
-	// 処理中
-	struct {
-		uint8 operand_size :1;	// 0x66 オペランドサイズプリフィックス
-		uint8 address_size :1;	// 0x67 アドレスサイズプリフィックス
-		uint8 segment_cs :1;	// 0x2E セグメントオーバーライドプリフィックス(CS)
-		uint8 segment_ss :1;	// 0x36 セグメントオーバーライドプリフィックス(SS)
-		uint8 segment_ds :1;	// 0x3E セグメントオーバーライドプリフィックス(DS)
-		uint8 segment_es :1;	// 0x26 セグメントオーバーライドプリフィックス(ES)
-		uint8 segment_fs :1;	// 0x64 セグメントオーバーライドプリフィックス(FS)
-		uint8 segment_gs :1;	// 0x65 セグメントオーバーライドプリフィックス(GS)
-		uint8 repne :1;			// 0xF2 リピートプリフィックス(REPNE/REPZE)
-		uint8 rep :1;			// 0xF3 リピートプリフィックス(REP/REPE/REPZ)
-		uint8 rex :4;			// 0x40~0x4F REXプリフィックス
-		uint32 vex3;			// 0xC4 VEXプリフィックス
-		uint16 vex2;			// 0xC5 VEXプリフィックス
-	} prefix;
-	uint8 modrm;
-	uint8 sib;
-} CPUx86;
-
-
-void cpu_current_reset(CPUx86 *cpu)
-{
-	memset(&(cpu->prefix), 0, sizeof(cpu->prefix));
-	//cpu->modrm = 0;
-	//cpu->sib = 0;
-}
-
-
-// register
-
-#define cpu_regist_eax(cpu)	(cpu)->regs[0]
-#define cpu_regist_ecx(cpu)	(cpu)->regs[1]
-#define cpu_regist_edx(cpu)	(cpu)->regs[2]
-#define cpu_regist_ebx(cpu)	(cpu)->regs[3]
-#define cpu_regist_esp(cpu)	(cpu)->regs[4]
-#define cpu_regist_ebp(cpu)	(cpu)->regs[5]
-#define cpu_regist_esi(cpu)	(cpu)->regs[6]
-#define cpu_regist_edi(cpu)	(cpu)->regs[7]
-
-#define cpu_regist_ax(cpu)	((cpu)->regs[0] & 0xFFFF)
-#define cpu_regist_cx(cpu)	((cpu)->regs[1] & 0xFFFF)
-#define cpu_regist_dx(cpu)	((cpu)->regs[2] & 0xFFFF)
-#define cpu_regist_bx(cpu)	((cpu)->regs[3] & 0xFFFF)
-#define cpu_regist_sp(cpu)	((cpu)->regs[4] & 0xFFFF)
-#define cpu_regist_bp(cpu)	((cpu)->regs[5] & 0xFFFF)
-#define cpu_regist_si(cpu)	((cpu)->regs[6] & 0xFFFF)
-#define cpu_regist_di(cpu)	((cpu)->regs[7] & 0xFFFF)
-
-#define cpu_regist_al(cpu)	((cpu)->regs[0] & 0xFF)
-#define cpu_regist_cl(cpu)	((cpu)->regs[1] & 0xFF)
-#define cpu_regist_dl(cpu)	((cpu)->regs[2] & 0xFF)
-#define cpu_regist_bl(cpu)	((cpu)->regs[3] & 0xFF)
-
-#define cpu_regist_ah(cpu)	((cpu)->regs[0]>>8 & 0xFF)
-#define cpu_regist_ch(cpu)	((cpu)->regs[1]>>8 & 0xFF)
-#define cpu_regist_dh(cpu)	((cpu)->regs[2]>>8 & 0xFF)
-#define cpu_regist_bh(cpu)	((cpu)->regs[3]>>8 & 0xFF)
-
-
-// EFLAGS
-
-#define CPU_EFLAGS_CF		0x00000001
-#define CPU_EFLAGS_PF		0x00000004
-#define CPU_EFLAGS_AF		0x00000010
-#define CPU_EFLAGS_ZF		0x00000040
-#define CPU_EFLAGS_SF		0x00000080
-#define CPU_EFLAGS_TF		0x00000100
-#define CPU_EFLAGS_IF		0x00000200
-#define CPU_EFLAGS_DF		0x00000400
-#define CPU_EFLAGS_OF		0x00000800
-#define CPU_EFLAGS_IOPL		0x00003000
-#define CPU_EFLAGS_NT		0x00004000
-#define CPU_EFLAGS_RF		0x00010000
-#define CPU_EFLAGS_VM		0x00020000
-#define CPU_EFLAGS_AC		0x00040000
-#define CPU_EFLAGS_VIF		0x00080000
-#define CPU_EFLAGS_VIP		0x00100000
-#define CPU_EFLAGS_ID		0x00200000
-
-#define CPU_EFLAGS_CF_BIT	0
-#define CPU_EFLAGS_PF_BIT	2
-#define CPU_EFLAGS_AF_BIT	4
-#define CPU_EFLAGS_ZF_BIT	6
-#define CPU_EFLAGS_SF_BIT	7
-#define CPU_EFLAGS_TF_BIT	8
-#define CPU_EFLAGS_IF_BIT	9
-#define CPU_EFLAGS_DF_BIT	10
-#define CPU_EFLAGS_OF_BIT	11
-#define CPU_EFLAGS_IOPL_BIT	12
-#define CPU_EFLAGS_NT_BIT	14
-#define CPU_EFLAGS_RF_BIT	16
-#define CPU_EFLAGS_VM_BIT	17
-#define CPU_EFLAGS_AC_BIT	18
-#define CPU_EFLAGS_VIF_BIT	19
-#define CPU_EFLAGS_VIP_BIT	20
-#define CPU_EFLAGS_ID_BIT	21
-
-#define set_cpu_eflags(cpu, type, val)	(cpu->eflags ^= ((val) << type##_BIT) ^ (type & cpu->eflags))
-#define cpu_eflags(cpu, type)			((cpu->eflags & type) >> type##_BIT)
-
-
-// cr0
-
-#define CR0_PE		0x00000001
-#define CR0_MP		0x00000002
-#define CR0_EM		0x00000004
-#define CR0_TS		0x00000008
-#define CR0_ET		0x00000010
-#define CR0_NE		0x00000020
-#define CR0_WP		0x00010000
-#define CR0_AM		0x00040000
-#define CR0_NW		0x20000000
-#define CR0_CD		0x40000000
-#define CR0_PG		0x80000000
-
-#define CR0_PE_BIT	0
-#define CR0_MP_BIT	1
-#define CR0_EM_BIT	2
-#define CR0_TS_BIT	3
-#define CR0_ET_BIT	4
-#define CR0_NE_BIT	5
-#define CR0_WP_BIT	16
-#define CR0_AM_BIT	18
-#define CR0_NW_BIT	29
-#define CR0_CD_BIT	30
-#define CR0_PG_BIT	31
-
-#define set_cpu_cr0(cpu, type, val)	(cpu->cr0 ^= ((val) << type##_BIT) ^ (type & cpu->cr0))
-#define cpu_cr0(cpu, type)			((cpu->cr0 & type) >> type##_BIT)
-
-
-// Segment Descriptor
-
-typedef struct {
-	uint16 limitL;
-	uint16 baseL;
-	uint8 baseM;
-	uint8 type;
-	uint8 limitH;
-	uint8 baseH;
-} SegDesc;
-
-#define segdesc_limit(desc)	(segdesc_g(desc) ? (((desc)->limitH & 0x0F << 16) | ((desc)->limitL)) << 12 : ((desc)->limitH & 0x0F << 16) | ((desc)->limitL))
-#define segdesc_base(desc)	(((desc)->baseH << 24) | ((desc)->baseM << 16) | ((desc)->baseL))
-
-#define segdesc_p(desc)		(((desc)->type >> 7) & 0x01)
-#define segdesc_dpl(desc)	(((desc)->type >> 5) & 0x03)
-#define segdesc_s(desc)		(((desc)->type >> 4) & 0x01)
-#define segdesc_type(desc)	(((desc)->type >> 1) & 0x07)
-#define segdesc_a(desc)		((desc)->type & 0x01)
-
-#define segdesc_g(desc)		(((desc)->limitH >> 7) & 0x01)
-#define segdesc_d(desc)		(((desc)->limitH >> 6) & 0x01)
-#define segdesc_avl(desc)	(((desc)->limitH >> 4) & 0x01)
+#include "cpux86.h"
 
 
 // uintx
-
-typedef struct {
-	union {
-		void *voidp;
-		uint8 *uint8p;
-		uint16 *uint16p;
-		uint32 *uint32p;
-	} ptr;
-	// 1 => uint8
-	// 2 => uint16
-	// 4 => uint32
-	char type;
-} uintp;
-
-#define UINTX_INT8		1
-#define UINTX_UINT8		1
-#define UINTX_INT16		2
-#define UINTX_UINT16	2
-#define UINTX_INT32		4
-#define UINTX_UINT32	4
 
 // 符号拡張されたuint32を返す
 uint32 uintp_val(uintp *p)
@@ -312,13 +78,39 @@ void set_uintp_val_ze(uintp *dst, uint32 val)
 	uintp_val_copy(dst, &src);
 }
 
+// msbの値を返す
+int uintp_msb(uintp *target)
+{
+	uint32 bit;
+	switch (target->type) {
+	case 1:
+		bit = 0x80;
+		break;
+	case 2:
+		bit = 0x8000;
+		break;
+	case 4:
+		bit = 0x80000000;
+		break;
+	default:
+		bit = 0x00;
+	}
+	return (uintp_val(target) & bit) ? 1 : 0;
+}
+
+// lsbの値を返す
+int uintp_lsb(uintp *target)
+{
+	return (uintp_val(target) & 0x01) ? 1 : 0;
+}
+
 // 立っているビット数を数える
 int bit_count8(uint8 val)
 {
 	uint8 count;
 	count = (val & 0x55) + ((val >> 1) & 0x55);
-    count = (count & 0x33) + ((count >> 2) & 0x33);
-    return (count & 0x0f) + ((count >> 4) & 0x0f);
+	count = (count & 0x33) + ((count >> 2) & 0x33);
+	return (count & 0x0f) + ((count >> 4) & 0x0f);
 }
 
 
@@ -449,7 +241,6 @@ int cpu_sib_base(CPUx86 *cpu)
 	return cpu->sib & 0x03;
 }
 
-//#define cpu_operand_size(cpu)	(((cpu_cr0(cpu, CR0_PE) + ((cpu)->prefix.operand_size ? 1 : 0)) & 1) ? 2 : 4)
 #define cpu_operand_size(cpu)	((cpu_cr0(cpu, CR0_PE)==(cpu)->prefix.operand_size) ? 2 : 4)
 
 void cpu_modrm_address(CPUx86 *cpu, uintp *result, int use_reg)
@@ -663,17 +454,11 @@ void opcode_add(CPUx86 *cpu, uintp *dst, uintp *src)
 		set_cpu_eflags(cpu, CPU_EFLAGS_CF, 0);
 	}
 
-	// PF
-	set_cpu_eflags(cpu, CPU_EFLAGS_PF, (bit_count8(val) & 0x01) ? 0 : 1);
-
 	// AF
 	//set_cpu_eflags(cpu, CPU_EFLAGS_AF, )
 
-	// ZF
-	set_cpu_eflags(cpu, CPU_EFLAGS_ZF, val==0 ? 1 : 0);
-
-	// SF
-	set_cpu_eflags(cpu, CPU_EFLAGS_SF, 0<=(int)val ? 0 : 1);
+	// SF ZF PF
+	set_cpu_eflags_sf_zf_pf(cpu, val);
 
 	set_uintp_val(dst, val);
 
@@ -692,15 +477,8 @@ void opcode_and(CPUx86 *cpu, uintp *dst, uintp *src)
 	// CF
 	set_cpu_eflags(cpu, CPU_EFLAGS_CF, 0);
 
-	// PF
-	set_cpu_eflags(cpu, CPU_EFLAGS_PF, (bit_count8(val) & 0x01) ? 0 : 1);
-
-	// ZF
-	set_cpu_eflags(cpu, CPU_EFLAGS_ZF, val==0 ? 1 : 0);
-
-	// SF
-	set_cpu_eflags(cpu, CPU_EFLAGS_SF, 0<=(int)val ? 0 : 1);
-
+	// SF ZF PF
+	set_cpu_eflags_sf_zf_pf(cpu, val);
 }
 
 void opcode_call(CPUx86 *cpu, uintp *val)
@@ -812,6 +590,21 @@ void opcode_js(CPUx86 *cpu, uintp *rel)
 	}
 }
 
+void opcode_mov(CPUx86 *cpu, uintp *dst, uintp *src)
+{
+	set_uintp_val(dst, uintp_val(src));
+}
+
+void opcode_movsx(CPUx86 *cpu, uintp *dst, uintp *src)
+{
+	set_uintp_val(dst, uintp_val(src));
+}
+
+void opcode_movzx(CPUx86 *cpu, uintp *dst, uintp *src)
+{
+	set_uintp_val(dst, uintp_val_ze(src));
+}
+
 void opcode_out(CPUx86 *cpu, uintp *port, uintp *val)
 {
 	// todo
@@ -831,14 +624,8 @@ void opcode_or(CPUx86 *cpu, uintp *dst, uintp *src)
 	// CF
 	set_cpu_eflags(cpu, CPU_EFLAGS_CF, 0);
 
-	// PF
-	set_cpu_eflags(cpu, CPU_EFLAGS_PF, (bit_count8(val) & 0x01) ? 0 : 1);
-
-	// ZF
-	set_cpu_eflags(cpu, CPU_EFLAGS_ZF, val==0 ? 1 : 0);
-
-	// SF
-	set_cpu_eflags(cpu, CPU_EFLAGS_SF, 0<=(int)val ? 0 : 1);
+	// SF ZF PF
+	set_cpu_eflags_sf_zf_pf(cpu, val);
 }
 
 void opcode_pop(CPUx86 *cpu, uintp *dst)
@@ -893,19 +680,36 @@ void opcode_push(CPUx86 *cpu, uintp *val)
 	}
 }
 
-void opcode_mov(CPUx86 *cpu, uintp *dst, uintp *src)
+void opcode_sar(CPUx86 *cpu, uintp *dst, uintp *count)
 {
-	set_uintp_val(dst, uintp_val(src));
+	uint32 temp_count;
+	temp_count = uintp_val(count) & 0x1F;
+
+	while (temp_count) {
+		set_cpu_eflags(cpu, CPU_EFLAGS_CF, uintp_lsb(dst));
+		set_uintp_val(dst, (int32)uintp_val(dst) / 2);
+		temp_count--;
+	}
+
+	if ((uintp_val(count) & 0x1F)==1) {
+		set_cpu_eflags(cpu, CPU_EFLAGS_OF, 0);
+	}
 }
 
-void opcode_movsx(CPUx86 *cpu, uintp *dst, uintp *src)
+void opcode_sal(CPUx86 *cpu, uintp *dst, uintp *count)
 {
-	set_uintp_val(dst, uintp_val(src));
-}
+	uint32 temp_count;
+	temp_count = uintp_val(count) & 0x1F;
 
-void opcode_movzx(CPUx86 *cpu, uintp *dst, uintp *src)
-{
-	set_uintp_val(dst, uintp_val_ze(src));
+	while (temp_count) {
+		set_cpu_eflags(cpu, CPU_EFLAGS_CF, uintp_msb(dst));
+		set_uintp_val(dst, uintp_val(dst) * 2);
+		temp_count--;
+	}
+
+	if ((uintp_val(count) & 0x1F)==1) {
+		set_cpu_eflags(cpu, CPU_EFLAGS_OF, uintp_msb(dst) ^ cpu_eflags(cpu, CPU_EFLAGS_CF));
+	}
 }
 
 void opcode_sbb(CPUx86 *cpu, uintp *dst, uintp *src)
@@ -913,6 +717,40 @@ void opcode_sbb(CPUx86 *cpu, uintp *dst, uintp *src)
 	set_uintp_val(dst, uintp_val(dst) - uintp_val(src) - cpu_eflags(cpu, CPU_EFLAGS_CF));
 
 	// todo set flag: OF SF ZF AF PF CF
+}
+
+void opcode_shr(CPUx86 *cpu, uintp *dst, uintp *count)
+{
+	uint32 temp_count;
+	uint32 temp_dest_val;
+	uintp temp_dest;
+
+	temp_count = uintp_val(count) & 0x1F;
+
+	temp_dest.ptr.voidp = &temp_dest_val;
+	temp_dest.type = dst->type;
+	uintp_val_copy(&temp_dest, dst);
+
+	while (temp_count) {
+		set_cpu_eflags(cpu, CPU_EFLAGS_CF, uintp_lsb(dst));
+		set_uintp_val(dst, uintp_val(dst) / 2);
+		temp_count--;
+	}
+
+	// OF
+	if ((uintp_val(count) & 0x1F)==1) {
+		set_cpu_eflags(cpu, CPU_EFLAGS_OF, uintp_msb(&temp_dest));
+	}
+
+	// SF ZF PF
+	if ((uintp_val(count) & 0x1F)!=0) {
+		set_cpu_eflags_sf_zf_pf(cpu, uintp_val(dst));
+	}
+}
+
+void opcode_shl(CPUx86 *cpu, uintp *dst, uintp *count)
+{
+	opcode_sal(cpu, dst, count);
 }
 
 void opcode_sub(CPUx86 *cpu, uintp *dst, uintp *src)
@@ -929,14 +767,8 @@ void opcode_sub(CPUx86 *cpu, uintp *dst, uintp *src)
 		set_cpu_eflags(cpu, CPU_EFLAGS_CF, 0);
 	}
 
-	// PF
-	set_cpu_eflags(cpu, CPU_EFLAGS_PF, (bit_count8(val) & 0x01) ? 0 : 1);
-
-	// ZF
-	set_cpu_eflags(cpu, CPU_EFLAGS_ZF, val==0 ? 1 : 0);
-
-	// SF
-	set_cpu_eflags(cpu, CPU_EFLAGS_SF, 0<=(int)val ? 0 : 1);
+	// SF ZF PF
+	set_cpu_eflags_sf_zf_pf(cpu, val);
 
 	set_uintp_val(dst, val);
 }
@@ -958,14 +790,8 @@ void opcode_xor(CPUx86 *cpu, uintp *dst, uintp *src)
 	// CF
 	set_cpu_eflags(cpu, CPU_EFLAGS_CF, 0);
 
-	// PF
-	set_cpu_eflags(cpu, CPU_EFLAGS_PF, (bit_count8(val) & 0x01) ? 0 : 1);
-
-	// ZF
-	set_cpu_eflags(cpu, CPU_EFLAGS_ZF, val==0 ? 1 : 0);
-
-	// SF
-	set_cpu_eflags(cpu, CPU_EFLAGS_SF, 0<=(int)val ? 0 : 1);
+	// SF ZF PF
+	set_cpu_eflags_sf_zf_pf(cpu, val);
 }
 
 
@@ -1021,6 +847,26 @@ void delete_cpux86(CPUx86 *cpu)
 		}
 		free(cpu);
 	}
+}
+
+void cpu_current_reset(CPUx86 *cpu)
+{
+	memset(&(cpu->prefix), 0, sizeof(cpu->prefix));
+	//cpu->modrm = 0;
+	//cpu->sib = 0;
+}
+
+// eflags(SF ZF PF)を設定
+void set_cpu_eflags_sf_zf_pf(CPUx86 *cpu, uint32 val)
+{
+	// PF
+	set_cpu_eflags(cpu, CPU_EFLAGS_PF, (bit_count8(val) & 0x01) ? 0 : 1);
+
+	// ZF
+	set_cpu_eflags(cpu, CPU_EFLAGS_ZF, val==0 ? 1 : 0);
+
+	// SF
+	set_cpu_eflags(cpu, CPU_EFLAGS_SF, 0<=(int)val ? 0 : 1);
 }
 
 void exec_cpux86(CPUx86 *cpu)
@@ -1309,7 +1155,6 @@ void exec_cpux86(CPUx86 *cpu)
 
 				// src immediate
 				operand2.ptr.voidp = mem_eip_ptr(cpu, 1);
-				//operand2.type = -1;
 				operand2.type = 1;
 
 				// operation
@@ -1429,6 +1274,53 @@ void exec_cpux86(CPUx86 *cpu)
 				break;
 
 			// 0xC0
+			case 0xC0:
+				// modrm
+				mem_eip_load_modrm(cpu);
+
+				// dst register/memory
+				cpu_modrm_address(cpu, &operand1, 0);
+				operand1.type = 1;
+
+				// src immediate
+				operand2.ptr.voidp = mem_eip_ptr(cpu, 1);
+				operand2.type = 1;
+
+				// operation
+				switch (cpu_modrm_reg(cpu)) {
+				case 0:	// C0 /0 ib : rol r/m8 imm8
+					//opcode_rol(cpu, &operand1, &operand2);
+					printf("todo 0xC0 /0\n");
+					exit(1);
+					break;
+				case 1:	// C0 /1 ib : ror r/m8 imm8
+					//opcode_ror(cpu, &operand1, &operand2);
+					printf("todo 0xC0 /1\n");
+					exit(1);
+					break;
+				case 2:	// C0 /2 ib : rcl r/m8 imm8
+					//opcode_rcl(cpu, &operand1, &operand2);
+					printf("todo 0xC0 /2\n");
+					exit(1);
+					break;
+				case 3:	// C0 /3 ib : rcr r/m8 imm8
+					//opcode_rcr(cpu, &operand1, &operand2);
+					printf("todo 0xC0 /3\n");
+					exit(1);
+					break;
+				case 4:	// C0 /4 ib : sal r/m8 imm8
+				case 6:	// C0 /6 ib = salとして動作する
+					opcode_sal(cpu, &operand1, &operand2);
+					break;
+				case 5:	// C0 /5 ib : shr r/m8 imm8
+					opcode_shr(cpu, &operand1, &operand2);
+					break;
+				case 7:	// C0 /7 ib : sar r/m8 imm8
+					opcode_sar(cpu, &operand1, &operand2);
+					break;
+				}
+				break;
+
 			case 0xC7:	// C7 /0 id sz : mov r/m32 imm32
 				mem_eip_load_modrm(cpu);
 				switch (cpu_modrm_reg(cpu)) {
