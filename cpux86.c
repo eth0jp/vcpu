@@ -632,41 +632,6 @@ void cpu_modrm_address(CPUx86 *cpu, uintp *result, int use_reg)
 }
 
 
-// stack
-
-void stack_push(CPUx86 *cpu, uintp *val)
-{
-	uintp dst;
-
-	if (cpu_cr0(cpu, CR0_PE)) {
-		// stack size is 32bit
-		// todo
-	} else {
-		// stack size is 16bit
-		if (val->type==2) {
-			// operand size is 2byte
-			cpu_regist_esp(cpu) -= 2;
-			//dst.ptr.voidp = &(cpu->mem[seg_ss(cpu) + cpu_regist_esp(cpu)]);
-			dst.ptr.voidp = &(cpu->mem[cpu_regist_esp(cpu)]);
-			dst.type = 2;
-			uintp_val_copy(&dst, val);
-		} else if (val->type==4) {
-			// operand size is 4byte
-			cpu_regist_esp(cpu) -= 4;
-			//dst.ptr.voidp = &(cpu->mem[seg_ss(cpu) + cpu_regist_esp(cpu)]);
-			dst.ptr.voidp = &(cpu->mem[cpu_regist_esp(cpu)]);
-			dst.type = 4;
-			uintp_val_copy(&dst, val);
-		}
-	}
-}
-
-void stack_pop(CPUx86 *cpu)
-{
-	// todo
-}
-
-
 // opcode
 
 void opcode_adc(CPUx86 *cpu, uintp *dst, uintp *src)
@@ -699,7 +664,7 @@ void opcode_call(CPUx86 *cpu, uintp *val)
 	eip.ptr.voidp = &(cpu->eip);
 	eip.type = 4;
 
-	stack_push(cpu, &eip);
+	opcode_push(cpu, &eip);
 	cpu->eip = cpu->eip + uintp_val(val);
 }
 
@@ -793,6 +758,58 @@ void opcode_or(CPUx86 *cpu, uintp *dst, uintp *src)
 	set_uintp_val(dst, uintp_val(dst) | uintp_val(src));
 
 	// todo set flag: OF CF SF ZF PF
+}
+
+void opcode_pop(CPUx86 *cpu, uintp *dst)
+{
+	uintp src;
+
+	if (cpu_cr0(cpu, CR0_PE)) {
+		// stack size is 32bit
+		// todo
+	} else {
+		// stack size is 16bit
+		if (dst->type==2) {
+			// operand size is 2byte
+			src.ptr.voidp = &(cpu->mem[cpu_regist_esp(cpu)]);
+			src.type = 2;
+			uintp_val_copy(dst, &src);
+			cpu_regist_esp(cpu) += 2;
+		} else if (dst->type==4) {
+			// operand size is 4byte
+			src.ptr.voidp = &(cpu->mem[cpu_regist_esp(cpu)]);
+			src.type = 4;
+			uintp_val_copy(dst, &src);
+			cpu_regist_esp(cpu) += 4;
+		}
+	}
+}
+
+void opcode_push(CPUx86 *cpu, uintp *val)
+{
+	uintp dst;
+
+	if (cpu_cr0(cpu, CR0_PE)) {
+		// stack size is 32bit
+		// todo
+	} else {
+		// stack size is 16bit
+		if (val->type==2) {
+			// operand size is 2byte
+			cpu_regist_esp(cpu) -= 2;
+			//dst.ptr.voidp = &(cpu->mem[seg_ss(cpu) + cpu_regist_esp(cpu)]);
+			dst.ptr.voidp = &(cpu->mem[cpu_regist_esp(cpu)]);
+			dst.type = 2;
+			uintp_val_copy(&dst, val);
+		} else if (val->type==4) {
+			// operand size is 4byte
+			cpu_regist_esp(cpu) -= 4;
+			//dst.ptr.voidp = &(cpu->mem[seg_ss(cpu) + cpu_regist_esp(cpu)]);
+			dst.ptr.voidp = &(cpu->mem[cpu_regist_esp(cpu)]);
+			dst.type = 4;
+			uintp_val_copy(&dst, val);
+		}
+	}
 }
 
 void opcode_mov(CPUx86 *cpu, uintp *dst, uintp *src)
@@ -900,7 +917,7 @@ void exec_cpux86(CPUx86 *cpu)
 	uintp operand1;
 	uintp operand2;
 
-	while (c++<40) {
+	while (c++<50) {
 		dump_cpu(cpu);
 
 		cpu_current_reset(cpu);
@@ -994,6 +1011,15 @@ void exec_cpux86(CPUx86 *cpu)
 				opcode_add(cpu, &operand1, &operand2);
 				break;
 
+			case 0x07:	// 07 : pop es
+				// dst register
+				operand1.ptr.voidp = &(cpu->es);
+				operand1.type = 2;
+
+				// operation
+				opcode_pop(cpu, &operand1);
+				break;
+
 			// 0x50
 			case 0x50:	// 50 sz : push eax
 			case 0x51:	// 51 sz : push ecx
@@ -1008,7 +1034,7 @@ void exec_cpux86(CPUx86 *cpu)
 				operand1.type = 4;
 
 				// operation
-				stack_push(cpu, &operand1);
+				opcode_push(cpu, &operand1);
 				break;
 
 			// 70
