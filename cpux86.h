@@ -263,7 +263,6 @@ extern void mem_eip_load_modrm(CPUx86 *cpu);
 extern int cpu_modrm_mod(CPUx86 *cpu);
 extern int cpu_modrm_reg(CPUx86 *cpu);
 extern int cpu_modrm_rm(CPUx86 *cpu);
-extern int is_cpu_modrm_r(CPUx86 *cpu);
 extern int cpu_sib_scale(CPUx86 *cpu);
 extern int cpu_sib_index(CPUx86 *cpu);
 extern int cpu_sib_base(CPUx86 *cpu);
@@ -310,7 +309,7 @@ extern void dump_cpu(CPUx86 *cpu);
 extern CPUx86* new_cpux86(size_t mem_size);
 extern void delete_cpux86(CPUx86 *cpu);
 extern void cpu_current_reset(CPUx86 *cpu);
-extern void set_cpu_eflags_sf_zf_pf(CPUx86 *cpu, uint32 val);
+extern void set_cpu_eflags_sf_zf_pf(CPUx86 *cpu, uintp *target);
 extern void exec_cpux86(CPUx86 *cpu);
 extern void run_cpux86(CPUx86 *cpu);
 

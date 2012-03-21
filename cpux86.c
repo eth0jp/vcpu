@@ -246,12 +246,6 @@ int cpu_modrm_rm(CPUx86 *cpu)
 	return cpu->modrm & 0x07;
 }
 
-int is_cpu_modrm_r(CPUx86 *cpu)
-{
-	//return modrm->modrm>>3&0x07 && modrm->modrm&0x07;
-	return cpu_modrm_reg(cpu) && cpu_modrm_rm(cpu);
-}
-
 int cpu_sib_scale(CPUx86 *cpu)
 {
 	return cpu->sib>>6 & 0x03;
@@ -465,10 +459,6 @@ void opcode_aam(CPUx86 *cpu, uintp *val)
 
 void opcode_adc(CPUx86 *cpu, uintp *dst, uintp *src)
 {
-	set_uintp_val(dst, uintp_val(dst) + uintp_val(src) + cpu_eflags(cpu, CPU_EFLAGS_CF));
-
-	// todo set flag: OF SF ZF AF PF
-
 	uint32 val;
 	uint32 cf;
 	cf = cpu_eflags(cpu, CPU_EFLAGS_CF);
@@ -483,13 +473,13 @@ void opcode_adc(CPUx86 *cpu, uintp *dst, uintp *src)
 		set_cpu_eflags(cpu, CPU_EFLAGS_CF, 0);
 	}
 
+	set_uintp_val(dst, val);
+
 	// AF
 	//set_cpu_eflags(cpu, CPU_EFLAGS_AF, )
 
 	// SF ZF PF
-	set_cpu_eflags_sf_zf_pf(cpu, val);
-
-	set_uintp_val(dst, val);
+	set_cpu_eflags_sf_zf_pf(cpu, dst);
 
 	// todo set flag: AF
 }
@@ -498,7 +488,6 @@ void opcode_add(CPUx86 *cpu, uintp *dst, uintp *src)
 {
 	uint32 val;
 	val = uintp_val(dst) + uintp_val(src);
-	printf("add: 0x%X + 0x%X = 0x%X\n", uintp_val(dst), uintp_val(src), val);
 
 	// OF CF
 	if (uintp_val(dst) != val-uintp_val(src)) {
@@ -509,22 +498,20 @@ void opcode_add(CPUx86 *cpu, uintp *dst, uintp *src)
 		set_cpu_eflags(cpu, CPU_EFLAGS_CF, 0);
 	}
 
+	set_uintp_val(dst, val);
+
 	// AF
 	//set_cpu_eflags(cpu, CPU_EFLAGS_AF, )
 
 	// SF ZF PF
-	set_cpu_eflags_sf_zf_pf(cpu, val);
-
-	set_uintp_val(dst, val);
+	set_cpu_eflags_sf_zf_pf(cpu, dst);
 
 	// todo set flag: AF
 }
 
 void opcode_and(CPUx86 *cpu, uintp *dst, uintp *src)
 {
-	uint32 val;
-	val = uintp_val(dst) & uintp_val(src);
-	set_uintp_val(dst, val);
+	set_uintp_val(dst, uintp_val(dst) & uintp_val(src));
 
 	// OF
 	set_cpu_eflags(cpu, CPU_EFLAGS_OF, 0);
@@ -533,7 +520,7 @@ void opcode_and(CPUx86 *cpu, uintp *dst, uintp *src)
 	set_cpu_eflags(cpu, CPU_EFLAGS_CF, 0);
 
 	// SF ZF PF
-	set_cpu_eflags_sf_zf_pf(cpu, val);
+	set_cpu_eflags_sf_zf_pf(cpu, dst);
 }
 
 void opcode_call(CPUx86 *cpu, uintp *val)
@@ -681,7 +668,7 @@ void opcode_or(CPUx86 *cpu, uintp *dst, uintp *src)
 	set_cpu_eflags(cpu, CPU_EFLAGS_CF, 0);
 
 	// SF ZF PF
-	set_cpu_eflags_sf_zf_pf(cpu, val);
+	set_cpu_eflags_sf_zf_pf(cpu, dst);
 }
 
 void opcode_pop(CPUx86 *cpu, uintp *dst)
@@ -811,7 +798,7 @@ void opcode_shr(CPUx86 *cpu, uintp *dst, uintp *count)
 
 	// SF ZF PF
 	if ((uintp_val(count) & 0x1F)!=0) {
-		set_cpu_eflags_sf_zf_pf(cpu, uintp_val(dst));
+		set_cpu_eflags_sf_zf_pf(cpu, dst);
 	}
 }
 
@@ -834,15 +821,26 @@ void opcode_sub(CPUx86 *cpu, uintp *dst, uintp *src)
 		set_cpu_eflags(cpu, CPU_EFLAGS_CF, 0);
 	}
 
-	// SF ZF PF
-	set_cpu_eflags_sf_zf_pf(cpu, val);
-
 	set_uintp_val(dst, val);
+
+	// SF ZF PF
+	set_cpu_eflags_sf_zf_pf(cpu, dst);
 }
 
 void opcode_test(CPUx86 *cpu, uintp *src1, uintp *src2)
 {
-	// todo
+	uintp temp;
+	uint32 temp_val;
+	temp.ptr.voidp = &temp_val;
+	temp.type = src1->type;
+	set_uintp_val(&temp, uintp_val(src1) & uintp_val(src2));
+
+	// OF CF
+	set_cpu_eflags(cpu, CPU_EFLAGS_OF, 0);
+	set_cpu_eflags(cpu, CPU_EFLAGS_CF, 0);
+
+	// SF ZF PF
+	set_cpu_eflags_sf_zf_pf(cpu, &temp);
 }
 
 void opcode_xor(CPUx86 *cpu, uintp *dst, uintp *src)
@@ -858,7 +856,7 @@ void opcode_xor(CPUx86 *cpu, uintp *dst, uintp *src)
 	set_cpu_eflags(cpu, CPU_EFLAGS_CF, 0);
 
 	// SF ZF PF
-	set_cpu_eflags_sf_zf_pf(cpu, val);
+	set_cpu_eflags_sf_zf_pf(cpu, dst);
 }
 
 
@@ -924,8 +922,11 @@ void cpu_current_reset(CPUx86 *cpu)
 }
 
 // eflags(SF ZF PF)を設定
-void set_cpu_eflags_sf_zf_pf(CPUx86 *cpu, uint32 val)
+void set_cpu_eflags_sf_zf_pf(CPUx86 *cpu, uintp *target)
 {
+	uint32 val;
+	val = uintp_val(target);
+
 	// PF
 	set_cpu_eflags(cpu, CPU_EFLAGS_PF, (bit_count8(val&0xFF) & 0x01) ? 0 : 1);
 
@@ -933,7 +934,7 @@ void set_cpu_eflags_sf_zf_pf(CPUx86 *cpu, uint32 val)
 	set_cpu_eflags(cpu, CPU_EFLAGS_ZF, val==0 ? 1 : 0);
 
 	// SF
-	set_cpu_eflags(cpu, CPU_EFLAGS_SF, 0<=(int)val ? 0 : 1);
+	set_cpu_eflags(cpu, CPU_EFLAGS_SF, uintp_msb(target));
 }
 
 void exec_cpux86(CPUx86 *cpu)
@@ -1081,15 +1082,37 @@ void exec_cpux86(CPUx86 *cpu)
 				opcode_pop(cpu, &operand1);
 				break;
 
+			case 0x10:	// 10 /r : adc r/m8 r8
+				// modrm
+log_debug("0x10 load_modrm");
+				mem_eip_load_modrm(cpu);
+
+				// dst register/memory
+log_debug("0x10 dst");
+				cpu_modrm_address(cpu, &operand1, 0);
+				operand1.type = 1;
+
+				// src register
+log_debug("0x10 dst");
+				operand2.ptr.voidp = &(cpu->regs[cpu_modrm_reg(cpu)]);
+				operand2.type = 1;
+
+log_debug("0x10 adc");
+				// operation
+				opcode_adc(cpu, &operand1, &operand2);
+log_debug("0x10 dst ok");
+
+				break;
+
 			case 0x11:	// 11 /r sz : adc r/m32 r32
 				// modrm
 				mem_eip_load_modrm(cpu);
 
-				// src register/memory
+				// dst register/memory
 				cpu_modrm_address(cpu, &operand1, 0);
 				operand1.type = 4;
 
-				// dst register
+				// src register
 				operand2.ptr.voidp = &(cpu->regs[cpu_modrm_reg(cpu)]);
 				operand2.type = 4;
 
@@ -1267,34 +1290,48 @@ void exec_cpux86(CPUx86 *cpu)
 				// operation
 				opcode_test(cpu, &operand1, &operand2);
 				break;
-			case 0x89:	// 89 /r sz : mov r/m32 r32
+			case 0x85:	// 85 /r sz : test r/m32 r32
+				// modrm
 				mem_eip_load_modrm(cpu);
-				if (is_cpu_modrm_r(cpu)) {
-					// dst register/memory
-					cpu_modrm_address(cpu, &operand1, 0);
 
-					// src register
-					operand2.ptr.voidp = &(cpu->regs[cpu_modrm_reg(cpu)]);
-					operand2.type = 4;
+				// src1 register/memory
+				cpu_modrm_address(cpu, &operand1, 0);
 
-					// operation
-					opcode_mov(cpu, &operand1, &operand2);
-				}
+				// src2 register
+				operand2.ptr.voidp = &(cpu->regs[cpu_modrm_rm(cpu)]);
+				operand2.type = 4;
+
+				// operation
+				opcode_test(cpu, &operand1, &operand2);
+				break;
+			case 0x89:	// 89 /r sz : mov r/m32 r32
+				// modrm
+				mem_eip_load_modrm(cpu);
+
+				// dst register/memory
+				cpu_modrm_address(cpu, &operand1, 0);
+
+				// src register
+				operand2.ptr.voidp = &(cpu->regs[cpu_modrm_reg(cpu)]);
+				operand2.type = 4;
+
+				// operation
+				opcode_mov(cpu, &operand1, &operand2);
 				break;
 
 			case 0x8B:	// 8B /r sz : mov r32 r/m32
+				// modrm
 				mem_eip_load_modrm(cpu);
-				if (is_cpu_modrm_r(cpu)) {
-					// src register
-					operand1.ptr.voidp = &(cpu->regs[cpu_modrm_reg(cpu)]);
-					operand1.type = 4;
 
-					// dst register/memory
-					cpu_modrm_address(cpu, &operand2, 0);
+				// src register
+				operand1.ptr.voidp = &(cpu->regs[cpu_modrm_reg(cpu)]);
+				operand1.type = 4;
 
-					// operation
-					opcode_mov(cpu, &operand1, &operand2);
-				}
+				// dst register/memory
+				cpu_modrm_address(cpu, &operand2, 0);
+
+				// operation
+				opcode_mov(cpu, &operand1, &operand2);
 				break;
 
 			// 0xB0
