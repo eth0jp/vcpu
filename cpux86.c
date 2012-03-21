@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "cpux86.h"
+#include "log.h"
 
 
 // uintx
@@ -223,7 +224,7 @@ void mem_eip_load_modrm(CPUx86 *cpu)
 	cpu->modrm = mem_eip_load8(cpu);
 	if (cpu_cr0(cpu, CR0_PE) && cpu_modrm_mod(cpu)!=3 && cpu_modrm_rm(cpu)==5) {
 	//if (cpu_modrm_mod(cpu)!=3 && cpu_modrm_rm(cpu)==5) {
-		printf("load sib\n");
+		log_info("load sib\n");
 		cpu->sib = mem_eip_load8(cpu);
 	} else {
 		cpu->sib = 0;
@@ -345,6 +346,7 @@ void cpu_modrm_address(CPUx86 *cpu, uintp *result, int use_reg)
 		// リアルモード
 		switch (mod) {
 		case 0x00:	// [レジスタ + レジスタ]
+/*
 			switch (rm) {
 			case 0x00:	// [BX + SI]
 				offset = cpu_regist_bx(cpu) + cpu_regist_si(cpu);
@@ -372,6 +374,9 @@ void cpu_modrm_address(CPUx86 *cpu, uintp *result, int use_reg)
 				break;
 			}
 			result->ptr.voidp = &(cpu->mem[cpu->regs[rm] + offset]);
+			result->type = cpu->prefix.operand_size ? 2 : 4;
+*/
+			result->ptr.voidp = &(cpu->mem[cpu->regs[rm]]);
 			result->type = cpu->prefix.operand_size ? 2 : 4;
 			break;
 		case 0x01:	// [レジスタ + disp8]
@@ -731,6 +736,17 @@ void opcode_push(CPUx86 *cpu, uintp *val)
 	}
 }
 
+void opcode_ret_neer(CPUx86 *cpu)
+{
+	uintp dst;
+	uint32 dst_val;
+	dst.ptr.voidp = &dst_val;
+	dst.type = 4;
+
+	opcode_pop(cpu, &dst);
+	cpu->eip = uintp_val_ze(&dst);
+}
+
 void opcode_sar(CPUx86 *cpu, uintp *dst, uintp *count)
 {
 	uint32 temp_count;
@@ -929,8 +945,8 @@ void exec_cpux86(CPUx86 *cpu)
 	uintp operand1;
 	uintp operand2;
 
-	while (c++<1000) {
-		printf("[%d]\n", c);
+	while (c++<200) {
+		log_info("[%d]\n", c);
 		dump_cpu(cpu);
 
 		cpu_current_reset(cpu);
@@ -938,7 +954,7 @@ void exec_cpux86(CPUx86 *cpu)
 
 		while (is_prefix) {
 			opcode = mem_eip_load8(cpu);
-			printf("eip: %08X opcode: %X\n", cpu->eip-1, opcode);
+			log_info("eip: %08X opcode: %X\n", cpu->eip-1, opcode);
 
 			// prefix
 			switch (opcode) {
@@ -1342,22 +1358,22 @@ void exec_cpux86(CPUx86 *cpu)
 				switch (cpu_modrm_reg(cpu)) {
 				case 0:	// C0 /0 ib : rol r/m8 imm8
 					//opcode_rol(cpu, &operand1, &operand2);
-					printf("todo 0xC0 /0\n");
+					log_error("todo 0xC0 /0\n");
 					exit(1);
 					break;
 				case 1:	// C0 /1 ib : ror r/m8 imm8
 					//opcode_ror(cpu, &operand1, &operand2);
-					printf("todo 0xC0 /1\n");
+					log_error("todo 0xC0 /1\n");
 					exit(1);
 					break;
 				case 2:	// C0 /2 ib : rcl r/m8 imm8
 					//opcode_rcl(cpu, &operand1, &operand2);
-					printf("todo 0xC0 /2\n");
+					log_error("todo 0xC0 /2\n");
 					exit(1);
 					break;
 				case 3:	// C0 /3 ib : rcr r/m8 imm8
 					//opcode_rcr(cpu, &operand1, &operand2);
-					printf("todo 0xC0 /3\n");
+					log_error("todo 0xC0 /3\n");
 					exit(1);
 					break;
 				case 4:	// C0 /4 ib : sal r/m8 imm8
@@ -1371,6 +1387,10 @@ void exec_cpux86(CPUx86 *cpu)
 					opcode_sar(cpu, &operand1, &operand2);
 					break;
 				}
+				break;
+
+			case 0xC3:	// C3 : ret
+				opcode_ret_neer(cpu);
 				break;
 
 			case 0xC7:	// C7 /0 id sz : mov r/m32 imm32
@@ -1391,7 +1411,7 @@ void exec_cpux86(CPUx86 *cpu)
 					opcode_mov(cpu, &operand1, &operand2);
 					break;
 				default:
-					printf("not mapped opcode: 0xC0 reg %d\n", cpu_modrm_reg(cpu));
+					log_error("not mapped opcode: 0xC0 reg %d\n", cpu_modrm_reg(cpu));
 					break;
 				}
 				break;
@@ -1485,36 +1505,25 @@ void exec_cpux86(CPUx86 *cpu)
 					opcode_dec(cpu, &operand1);
 					break;
 				default:
-					printf("not mapped opcode: 0xFE reg %d\n", cpu_modrm_reg(cpu));
+					log_error("not mapped opcode: 0xFE reg %d\n", cpu_modrm_reg(cpu));
 					break;
 				}
 				break;
 
 			// not implemented opcode
 			default:
-				printf("not implemented opcode: 0x%02X\n", opcode);
+				log_error("not implemented opcode: 0x%02X\n", opcode);
 				exit(1);
 			}
 		} else {
 			opcode = mem_eip_load8(cpu);
-			printf("opcode: %X\n", opcode);
+			log_info("opcode: %X\n", opcode);
 
 			// 2byte opcode
 			switch (opcode) {
 			case 0xB6:	// 0F B6 /r sz : movzx r32 r/m8
 				// modrm
 				mem_eip_load_modrm(cpu);
-if (cpu->modrm==7) {
-printf("bx+di: 0x%X\n", cpu_regist_bx(cpu) + cpu_regist_edi(cpu));
-printf("bx: 0x%X\n", cpu_regist_bx(cpu));
-printf("di: 0x%X\n", cpu_regist_edi(cpu));
-void *aaaa = &(cpu->mem[cpu_regist_bx(cpu) + cpu_regist_edi(cpu)]);
-printf("mem[bx+di]: 0x%X\n", *(int*)aaaa);
-aaaa = &(cpu->mem[cpu_regist_bx(cpu)]);
-printf("mem[bx]: 0x%X\n", *(char*)aaaa);
-aaaa = &(cpu->mem[cpu_regist_edi(cpu)]);
-printf("mem[di]: 0x%X\n", *(char*)aaaa);
-}
 
 				// dst register
 				operand1.ptr.voidp = &(cpu->regs[cpu_modrm_reg(cpu)]);
@@ -1545,7 +1554,7 @@ printf("mem[di]: 0x%X\n", *(char*)aaaa);
 				break;
 
 			default:
-				printf("not implemented opcode: 0x0F%02X\n", opcode);
+				log_error("not implemented opcode: 0x0F%02X\n", opcode);
 				exit(1);
 			}
 		}
