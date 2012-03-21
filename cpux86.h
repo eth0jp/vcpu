@@ -245,6 +245,9 @@ extern int uintp_lsb(uintp *target);
 extern int bit_count8(uint8 val);
 
 // memory
+extern void mem_store8(CPUx86 *cpu, uint32 idx, uint8 value);
+extern int mem_store_file(CPUx86 *cpu, uint32 idx, char *fname);
+extern int mem_store_fp(CPUx86 *cpu, uint32 idx, FILE *fp);
 extern uint8 mem_eip_load8(CPUx86 *cpu);
 extern uint32 mem_eip_load8_se(CPUx86 *cpu);
 extern uint16 mem_eip_load16(CPUx86 *cpu);

@@ -116,9 +116,34 @@ int bit_count8(uint8 val)
 
 // memory
 
-#define mem_store8(cpu, idx, value)		(cpu)->mem[(idx)] = ((value)&0xFF)
-#define mem_store_file(cpu, idx, fname)	{FILE *fp = fopen(fname, "rb"); mem_store_fp((cpu), (idx), fp); fclose(fp);}
-#define mem_store_fp(cpu, idx, fp)		{uint32 tidx=(idx); int tmp; while((tmp=fgetc(fp))!=EOF) {mem_store8(cpu, tidx++, tmp);}}
+void mem_store8(CPUx86 *cpu, uint32 idx, uint8 value)
+{
+	cpu->mem[idx] = value;
+}
+
+int mem_store_file(CPUx86 *cpu, uint32 idx, char *fname)
+{
+	FILE *fp;
+	int bytes;
+	fp = fopen(fname, "rb");
+	bytes = -1;
+	if (fp) {
+		bytes = mem_store_fp(cpu, idx, fp);
+		fclose(fp);
+	}
+	return bytes;
+}
+
+int mem_store_fp(CPUx86 *cpu, uint32 idx, FILE *fp)
+{
+	int tidx;
+	int tmp;
+	tidx = idx;
+	while ((tmp=fgetc(fp))!=EOF) {
+		mem_store8(cpu, tidx++, tmp&0xFF);
+	}
+	return tidx-idx;
+}
 
 uint8 mem_eip_load8(CPUx86 *cpu)
 {
@@ -438,12 +463,37 @@ void opcode_adc(CPUx86 *cpu, uintp *dst, uintp *src)
 	set_uintp_val(dst, uintp_val(dst) + uintp_val(src) + cpu_eflags(cpu, CPU_EFLAGS_CF));
 
 	// todo set flag: OF SF ZF AF PF
+
+	uint32 val;
+	uint32 cf;
+	cf = cpu_eflags(cpu, CPU_EFLAGS_CF);
+	val = uintp_val(dst) + uintp_val(src) + cf;
+
+	// OF CF
+	if (uintp_val(dst) != val-uintp_val(src)-cf) {
+		set_cpu_eflags(cpu, CPU_EFLAGS_OF, 1);
+		set_cpu_eflags(cpu, CPU_EFLAGS_CF, 1);
+	} else {
+		set_cpu_eflags(cpu, CPU_EFLAGS_OF, 0);
+		set_cpu_eflags(cpu, CPU_EFLAGS_CF, 0);
+	}
+
+	// AF
+	//set_cpu_eflags(cpu, CPU_EFLAGS_AF, )
+
+	// SF ZF PF
+	set_cpu_eflags_sf_zf_pf(cpu, val);
+
+	set_uintp_val(dst, val);
+
+	// todo set flag: AF
 }
 
 void opcode_add(CPUx86 *cpu, uintp *dst, uintp *src)
 {
 	uint32 val;
 	val = uintp_val(dst) + uintp_val(src);
+	printf("add: 0x%X + 0x%X = 0x%X\n", uintp_val(dst), uintp_val(src), val);
 
 	// OF CF
 	if (uintp_val(dst) != val-uintp_val(src)) {
@@ -568,7 +618,7 @@ void opcode_jz(CPUx86 *cpu, uintp *rel)
 
 void opcode_jnz(CPUx86 *cpu, uintp *rel)
 {
-	if (cpu_eflags(cpu, CPU_EFLAGS_ZF)) {
+	if (!cpu_eflags(cpu, CPU_EFLAGS_ZF)) {
 		cpu->eip += uintp_val(rel);
 		if (rel->type==2) {
 			cpu->eip &= 0xFFFF;
@@ -602,6 +652,7 @@ void opcode_movsx(CPUx86 *cpu, uintp *dst, uintp *src)
 
 void opcode_movzx(CPUx86 *cpu, uintp *dst, uintp *src)
 {
+	printf("movzx: 0x%X 0x%X\n", uintp_val(src), uintp_val_ze(src));
 	set_uintp_val(dst, uintp_val_ze(src));
 }
 
@@ -609,7 +660,7 @@ void opcode_out(CPUx86 *cpu, uintp *port, uintp *val)
 {
 	// todo
 
-	printf("out: %x\n", uintp_val(val));
+	printf("out: 0x%X\n", uintp_val(val));
 }
 
 void opcode_or(CPUx86 *cpu, uintp *dst, uintp *src)
@@ -860,7 +911,7 @@ void cpu_current_reset(CPUx86 *cpu)
 void set_cpu_eflags_sf_zf_pf(CPUx86 *cpu, uint32 val)
 {
 	// PF
-	set_cpu_eflags(cpu, CPU_EFLAGS_PF, (bit_count8(val) & 0x01) ? 0 : 1);
+	set_cpu_eflags(cpu, CPU_EFLAGS_PF, (bit_count8(val&0xFF) & 0x01) ? 0 : 1);
 
 	// ZF
 	set_cpu_eflags(cpu, CPU_EFLAGS_ZF, val==0 ? 1 : 0);
@@ -879,6 +930,7 @@ void exec_cpux86(CPUx86 *cpu)
 	uintp operand2;
 
 	while (c++<1000) {
+		printf("[%d]\n", c);
 		dump_cpu(cpu);
 
 		cpu_current_reset(cpu);
@@ -1452,6 +1504,17 @@ void exec_cpux86(CPUx86 *cpu)
 			case 0xB6:	// 0F B6 /r sz : movzx r32 r/m8
 				// modrm
 				mem_eip_load_modrm(cpu);
+if (cpu->modrm==7) {
+printf("bx+di: 0x%X\n", cpu_regist_bx(cpu) + cpu_regist_edi(cpu));
+printf("bx: 0x%X\n", cpu_regist_bx(cpu));
+printf("di: 0x%X\n", cpu_regist_edi(cpu));
+void *aaaa = &(cpu->mem[cpu_regist_bx(cpu) + cpu_regist_edi(cpu)]);
+printf("mem[bx+di]: 0x%X\n", *(int*)aaaa);
+aaaa = &(cpu->mem[cpu_regist_bx(cpu)]);
+printf("mem[bx]: 0x%X\n", *(char*)aaaa);
+aaaa = &(cpu->mem[cpu_regist_edi(cpu)]);
+printf("mem[di]: 0x%X\n", *(char*)aaaa);
+}
 
 				// dst register
 				operand1.ptr.voidp = &(cpu->regs[cpu_modrm_reg(cpu)]);
@@ -1492,25 +1555,4 @@ void exec_cpux86(CPUx86 *cpu)
 void run_cpux86(CPUx86 *cpu)
 {
 	exec_cpux86(cpu);
-}
-
-int main(void)
-{
-	CPUx86 *cpu;
-
-	cpu = new_cpux86(1024*1024*32);
-/*
-	mem_store_file(cpu, 0x00100000, "../jslinux/files/vmlinux26.bin");
-	mem_store_file(cpu, 0x00400000, "../jslinux/files/root.bin");
-	mem_store_file(cpu, 0x10000, "../jslinux/files/linuxstart.bin");
-	cpu->eip = 0x10000;
-	cpu_regist_eax(cpu) = 0x2000000;
-	cpu_regist_ebx(cpu) = 0x200000;
-*/
-	mem_store_file(cpu, 0x00, "./asm/bootstrap.o");
-    cpu->eip = 0x00;
-	run_cpux86(cpu);
-	delete_cpux86(cpu);
-
-	return 0;
 }
