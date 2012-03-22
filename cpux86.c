@@ -932,7 +932,7 @@ void exec_cpux86(CPUx86 *cpu)
 	uintp operand2;
 	uint32 offset;
 
-	while (c++<300) {
+	while (c++<30000) {
 		log_info("[%d]\n", c);
 		dump_cpu(cpu);
 
@@ -1027,6 +1027,22 @@ void exec_cpux86(CPUx86 *cpu)
 				opcode_add(cpu, &operand1, &operand2);
 				break;
 
+			case 0x01:	// 01 /r sz : add r/m32 r32
+				// modrm
+				mem_eip_load_modrm(cpu);
+
+				// dst register/memory
+				cpu_modrm_address(cpu, &operand1);
+				operand1.type = 4;
+
+				// src register
+				operand2.ptr.voidp = &(cpu->regs[cpu->modrm_reg]);
+				operand2.type = 4;
+
+				// operation
+				opcode_add(cpu, &operand1, &operand2);
+				break;
+
 			case 0x02:	// 02 /r : add r8 r/m8
 				// modrm
 				mem_eip_load_modrm(cpu);
@@ -1114,6 +1130,23 @@ void exec_cpux86(CPUx86 *cpu)
 
 				// operation
 				opcode_sbb(cpu, &operand1, &operand2);
+				break;
+
+			// 0x20
+			case 0x2D:	// 2D id sz : sub eax imm32
+				// modrm
+				mem_eip_load_modrm(cpu);
+
+				// dst register
+				operand1.ptr.voidp = &(cpu->regs[0]);
+				operand1.type = 4;
+
+				// src immediate
+				operand2.ptr.voidp = mem_eip_ptr(cpu, 4);
+				operand2.type = 4;
+
+				// operation
+				opcode_sub(cpu, &operand1, &operand2);
 				break;
 
 			// 0x30
@@ -1453,6 +1486,53 @@ void exec_cpux86(CPUx86 *cpu)
 					opcode_shr(cpu, &operand1, &operand2);
 					break;
 				case 7:	// C0 /7 ib : sar r/m8 imm8
+					opcode_sar(cpu, &operand1, &operand2);
+					break;
+				}
+				break;
+
+			case 0xC1:
+				// modrm
+				mem_eip_load_modrm(cpu);
+
+				// dst register/memory
+				cpu_modrm_address(cpu, &operand1);
+				operand1.type = 4;
+
+				// src immediate
+				operand2.ptr.voidp = mem_eip_ptr(cpu, 1);
+				operand2.type = 1;
+
+				// operation
+				switch (cpu->modrm_reg) {
+				case 0:	// C1 /0 ib sz : rol r/m32 imm8
+					//opcode_rol(cpu, &operand1, &operand2);
+					log_error("todo 0xC0 /0\n");
+					exit(1);
+					break;
+				case 1:	// C1 /1 ib sz : ror r/m32 imm8
+					//opcode_ror(cpu, &operand1, &operand2);
+					log_error("todo 0xC0 /1\n");
+					exit(1);
+					break;
+				case 2:	// C1 /2 ib sz : rcl r/m32 imm8
+					//opcode_rcl(cpu, &operand1, &operand2);
+					log_error("todo 0xC0 /2\n");
+					exit(1);
+					break;
+				case 3:	// C1 /3 ib sz : rcr r/m32 imm8
+					//opcode_rcr(cpu, &operand1, &operand2);
+					log_error("todo 0xC0 /3\n");
+					exit(1);
+					break;
+				case 4:	// C1 /4 ib sz : sal r/m32 imm8
+				case 6:	// C1 /6 ib sz = salとして動作する
+					opcode_sal(cpu, &operand1, &operand2);
+					break;
+				case 5:	// C1 /5 ib sz : shr r/m32 imm8
+					opcode_shr(cpu, &operand1, &operand2);
+					break;
+				case 7:	// C1 /7 ib sz : sar r/m32 imm8
 					opcode_sar(cpu, &operand1, &operand2);
 					break;
 				}
