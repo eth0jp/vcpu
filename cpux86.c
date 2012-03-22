@@ -409,14 +409,14 @@ uint32 cpu_modrm_offset(CPUx86 *cpu)
 	return offset;
 }
 
-void cpu_modrm_address(CPUx86 *cpu, uintp *result, int use_reg)
+void cpu_modrm_address(CPUx86 *cpu, uintp *result)
 {
 	int mod;
 	int rm;
 	uint32 offset;
 
 	mod = cpu_modrm_mod(cpu);
-	rm = use_reg ? cpu_modrm_reg(cpu) : cpu_modrm_rm(cpu);
+	rm = cpu_modrm_rm(cpu);
 
 	if (mod==3) {
 		result->ptr.voidp = &(cpu->regs[rm]);
@@ -1023,7 +1023,7 @@ void exec_cpux86(CPUx86 *cpu)
 				mem_eip_load_modrm(cpu);
 
 				// dst register/memory
-				cpu_modrm_address(cpu, &operand1, 0);
+				cpu_modrm_address(cpu, &operand1);
 				operand1.type = 1;
 
 				// src register
@@ -1043,7 +1043,7 @@ void exec_cpux86(CPUx86 *cpu)
 				operand1.type = 1;
 
 				// src register/memory
-				cpu_modrm_address(cpu, &operand2, 0);
+				cpu_modrm_address(cpu, &operand2);
 				operand2.type = 1;
 
 				// operation
@@ -1059,7 +1059,7 @@ void exec_cpux86(CPUx86 *cpu)
 				operand1.type = 4;
 
 				// src register/memory
-				cpu_modrm_address(cpu, &operand2, 0);
+				cpu_modrm_address(cpu, &operand2);
 				operand2.type = 4;
 
 				// operation
@@ -1080,7 +1080,7 @@ void exec_cpux86(CPUx86 *cpu)
 				mem_eip_load_modrm(cpu);
 
 				// dst register/memory
-				cpu_modrm_address(cpu, &operand1, 0);
+				cpu_modrm_address(cpu, &operand1);
 				operand1.type = 1;
 
 				// src register
@@ -1096,7 +1096,7 @@ void exec_cpux86(CPUx86 *cpu)
 				mem_eip_load_modrm(cpu);
 
 				// dst register/memory
-				cpu_modrm_address(cpu, &operand1, 0);
+				cpu_modrm_address(cpu, &operand1);
 				operand1.type = 4;
 
 				// src register
@@ -1112,7 +1112,7 @@ void exec_cpux86(CPUx86 *cpu)
 				mem_eip_load_modrm(cpu);
 
 				// dst register/memory
-				cpu_modrm_address(cpu, &operand1, 0);
+				cpu_modrm_address(cpu, &operand1);
 				operand1.type = 1;
 
 				// src register
@@ -1129,7 +1129,7 @@ void exec_cpux86(CPUx86 *cpu)
 				mem_eip_load_modrm(cpu);
 
 				// dst register/memory
-				cpu_modrm_address(cpu, &operand1, 0);
+				cpu_modrm_address(cpu, &operand1);
 				operand1.type = 4;
 
 				// src register
@@ -1145,7 +1145,7 @@ void exec_cpux86(CPUx86 *cpu)
 				mem_eip_load_modrm(cpu);
 
 				// xrc1 register/memory
-				cpu_modrm_address(cpu, &operand1, 0);
+				cpu_modrm_address(cpu, &operand1);
 				operand1.type = 4;
 
 				// src2 register
@@ -1245,7 +1245,7 @@ void exec_cpux86(CPUx86 *cpu)
 				mem_eip_load_modrm(cpu);
 
 				// dst register/memory
-				cpu_modrm_address(cpu, &operand1, 0);
+				cpu_modrm_address(cpu, &operand1);
 
 				// src immediate
 				operand2.ptr.voidp = mem_eip_ptr(cpu, 1);
@@ -1284,7 +1284,7 @@ void exec_cpux86(CPUx86 *cpu)
 				mem_eip_load_modrm(cpu);
 
 				// src1 register/memory
-				cpu_modrm_address(cpu, &operand1, 0);
+				cpu_modrm_address(cpu, &operand1);
 
 				// src2 regisetr
 				operand2.ptr.voidp = &(cpu->regs[cpu_modrm_rm(cpu)]);
@@ -1298,7 +1298,7 @@ void exec_cpux86(CPUx86 *cpu)
 				mem_eip_load_modrm(cpu);
 
 				// src1 register/memory
-				cpu_modrm_address(cpu, &operand1, 0);
+				cpu_modrm_address(cpu, &operand1);
 
 				// src2 register
 				operand2.ptr.voidp = &(cpu->regs[cpu_modrm_rm(cpu)]);
@@ -1312,7 +1312,7 @@ void exec_cpux86(CPUx86 *cpu)
 				mem_eip_load_modrm(cpu);
 
 				// dst register/memory
-				cpu_modrm_address(cpu, &operand1, 0);
+				cpu_modrm_address(cpu, &operand1);
 				operand1.type = 1;
 
 				// src register
@@ -1327,7 +1327,7 @@ void exec_cpux86(CPUx86 *cpu)
 				mem_eip_load_modrm(cpu);
 
 				// dst register/memory
-				cpu_modrm_address(cpu, &operand1, 0);
+				cpu_modrm_address(cpu, &operand1);
 
 				// src register
 				operand2.ptr.voidp = &(cpu->regs[cpu_modrm_reg(cpu)]);
@@ -1346,7 +1346,7 @@ void exec_cpux86(CPUx86 *cpu)
 				operand1.type = 4;
 
 				// src register/memory
-				cpu_modrm_address(cpu, &operand2, 0);
+				cpu_modrm_address(cpu, &operand2);
 
 				// operation
 				opcode_mov(cpu, &operand1, &operand2);
@@ -1423,7 +1423,7 @@ void exec_cpux86(CPUx86 *cpu)
 				mem_eip_load_modrm(cpu);
 
 				// dst register/memory
-				cpu_modrm_address(cpu, &operand1, 0);
+				cpu_modrm_address(cpu, &operand1);
 				operand1.type = 1;
 
 				// src immediate
@@ -1474,7 +1474,7 @@ void exec_cpux86(CPUx86 *cpu)
 				switch (cpu_modrm_reg(cpu)) {
 				case 0:
 					// dst register/memory
-					cpu_modrm_address(cpu, &operand1, 0);
+					cpu_modrm_address(cpu, &operand1);
 
 					// src immediate
 					operand2.ptr.voidp = mem_eip_ptr(cpu, 4);
@@ -1563,7 +1563,7 @@ void exec_cpux86(CPUx86 *cpu)
 				switch (cpu_modrm_reg(cpu)) {
 				case 0:	// FE /0 : inc r/m8
 					// target
-					cpu_modrm_address(cpu, &operand1, 0);
+					cpu_modrm_address(cpu, &operand1);
 					operand1.type = 1;
 
 					// operation
@@ -1571,7 +1571,7 @@ void exec_cpux86(CPUx86 *cpu)
 					break;
 				case 1:	// FE /1 : dec r/m8
 					// target
-					cpu_modrm_address(cpu, &operand1, 0);
+					cpu_modrm_address(cpu, &operand1);
 					operand1.type = 1;
 
 					// operation
@@ -1603,7 +1603,7 @@ void exec_cpux86(CPUx86 *cpu)
 				operand1.type = 4;
 
 				// src register/memory
-				cpu_modrm_address(cpu, &operand2, 0);
+				cpu_modrm_address(cpu, &operand2);
 				operand2.type = 1;
 
 				// operation
@@ -1619,7 +1619,7 @@ void exec_cpux86(CPUx86 *cpu)
 				operand1.type = 4;
 
 				// src register/memory
-				cpu_modrm_address(cpu, &operand2, 0);
+				cpu_modrm_address(cpu, &operand2);
 				operand2.type = 1;
 
 				// operation

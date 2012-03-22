@@ -267,7 +267,7 @@ extern int cpu_sib_scale(CPUx86 *cpu);
 extern int cpu_sib_index(CPUx86 *cpu);
 extern int cpu_sib_base(CPUx86 *cpu);
 extern uint32 cpu_modrm_offset(CPUx86 *cpu);
-extern void cpu_modrm_address(CPUx86 *cpu, uintp *result, int use_reg);
+extern void cpu_modrm_address(CPUx86 *cpu, uintp *result);
 
 // opcode
 extern void opcode_aam(CPUx86 *cpu, uintp *val);
