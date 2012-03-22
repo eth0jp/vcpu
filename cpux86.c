@@ -1348,6 +1348,10 @@ void exec_cpux86(CPUx86 *cpu)
 			case 0x8D:	// 8D /r sz : lea r32 m
 				// modrm
 				mem_eip_load_modrm(cpu);
+				if (cpu->modrm_mod==0x03) {
+					// exception UD
+					// todo
+				}
 
 				// dst register
 				operand1.ptr.voidp = &(cpu->regs[cpu->modrm_reg]);
@@ -1355,10 +1359,6 @@ void exec_cpux86(CPUx86 *cpu)
 
 				// src memory
 				offset = cpu_modrm_offset(cpu);
-				if (offset==0xFFFFFFFF) {
-					// exception UD
-					// todo
-				}
 				operand2.ptr.voidp = &(offset);
 				operand2.type = 4;
 
