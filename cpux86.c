@@ -333,7 +333,15 @@ uint32 cpu_modrm_offset(CPUx86 *cpu)
 		// リアルモード
 		switch (mod) {
 		case 0x00:	// [レジスタ + レジスタ]
-			offset = cpu->regs[rm];
+			switch (rm) {
+			case 0x04:
+				rm = mem_eip_load8(cpu) & 0x07;
+				offset = cpu->regs[rm];
+				break;
+			default:
+				offset = cpu->regs[rm];
+				break;
+			}
 			break;
 		case 0x01:	// [レジスタ + disp8]
 			switch (rm) {
@@ -350,6 +358,7 @@ uint32 cpu_modrm_offset(CPUx86 *cpu)
 				offset = cpu_regist_bp(cpu) + cpu_regist_di(cpu) + mem_eip_load8_se(cpu);
 				break;
 			case 0x04:	// [SI + disp8]
+				rm = mem_eip_load8_se(cpu) & 0x07;
 				offset = cpu_regist_si(cpu) + mem_eip_load8_se(cpu);
 				break;
 			case 0x05:	// [DI + disp8]
@@ -409,172 +418,13 @@ void cpu_modrm_address(CPUx86 *cpu, uintp *result, int use_reg)
 	mod = cpu_modrm_mod(cpu);
 	rm = use_reg ? cpu_modrm_reg(cpu) : cpu_modrm_rm(cpu);
 
-	if (cpu_cr0(cpu, CR0_PE)) {
-		// プロテクトモード
-		switch (mod) {
-		case 0x00:
-			switch (rm) {
-			case 0x00:	// [EAX]
-			case 0x01:	// [ECX]
-			case 0x02:	// [EDX]
-			case 0x03:	// [EBX]
-			case 0x06:	// [ESI]
-			case 0x07:	// [EDI]
-				offset = cpu->regs[rm];
-				break;
-			case 0x04:	// [<SIB>]
-				// todo
-				break;
-			case 0x05:	// [disp32]
-				offset = mem_eip_load32(cpu);
-				break;
-			}
-			result->ptr.voidp = &(cpu->mem[offset]);
-			result->type = cpu->prefix.operand_size ? 2 : 4;
-			break;
-		case 0x01:
-			switch (rm) {
-			case 0x00:	// [EAX + disp8]
-			case 0x01:	// [ECX + disp8]
-			case 0x02:	// [EDX + disp8]
-			case 0x03:	// [EBX + disp8]
-			case 0x05:	// [EBP + disp8]
-			case 0x06:	// [ESI + disp8]
-			case 0x07:	// [EDI + disp8]
-				offset = cpu->regs[rm] + mem_eip_load8_se(cpu);
-				break;
-			case 0x04:	// [<SIB> + disp8]
-				// todo
-				break;
-			}
-			result->ptr.voidp = &(cpu->mem[offset]);
-			result->type = cpu->prefix.operand_size ? 2 : 4;
-			break;
-		case 0x02:
-			switch (rm) {
-			case 0x00:	// [EAX + disp16]
-			case 0x01:	// [ECX + disp16]
-			case 0x02:	// [EDX + disp16]
-			case 0x03:	// [EBX + disp16]
-			case 0x05:	// [EBP + disp16]
-			case 0x06:	// [ESI + disp16]
-			case 0x07:	// [EDI + disp16]
-				offset = cpu->regs[rm] + mem_eip_load16(cpu);
-				break;
-			case 0x04:	// [<SIB> + disp16]
-				// todo
-				break;
-			}
-			result->ptr.voidp = &(cpu->mem[offset]);
-			result->type = cpu->prefix.operand_size ? 2 : 4;
-			break;
-		case 0x03:
-			result->ptr.voidp = &(cpu->regs[rm]);
-			result->type = 4;
-			break;
-		}
+	if (mod==3) {
+		result->ptr.voidp = &(cpu->regs[rm]);
+		result->type = 4;
 	} else {
-		// リアルモード
-		switch (mod) {
-		case 0x00:	// [レジスタ + レジスタ]
-/*
-			switch (rm) {
-			case 0x00:	// [BX + SI]
-				offset = cpu_regist_bx(cpu) + cpu_regist_si(cpu);
-				break;
-			case 0x01:	// [BX + DI]
-				offset = cpu_regist_bx(cpu) + cpu_regist_di(cpu);
-				break;
-			case 0x02:	// [BP + SI]
-				offset = cpu_regist_bp(cpu) + cpu_regist_si(cpu);
-				break;
-			case 0x03:	// [BP + DI]
-				offset = cpu_regist_bp(cpu) + cpu_regist_di(cpu);
-				break;
-			case 0x04:	// [SI]
-				offset = cpu_regist_si(cpu);
-				break;
-			case 0x05:	// [DI]
-				offset = cpu_regist_di(cpu);
-				break;
-			case 0x06:	// [disp16]
-				offset = mem_eip_load16(cpu);
-				break;
-			case 0x07:	// [BX]
-				offset = cpu_regist_bx(cpu);
-				break;
-			}
-			result->ptr.voidp = &(cpu->mem[cpu->regs[rm] + offset]);
-			result->type = cpu->prefix.operand_size ? 2 : 4;
-*/
-			result->ptr.voidp = &(cpu->mem[cpu->regs[rm]]);
-			result->type = cpu->prefix.operand_size ? 2 : 4;
-			break;
-		case 0x01:	// [レジスタ + disp8]
-			switch (rm) {
-			case 0x00:	// [BX + SI + disp8]
-				offset = cpu_regist_bx(cpu) + cpu_regist_si(cpu) + mem_eip_load8_se(cpu);
-				break;
-			case 0x01:	// [BX + DI + disp8]
-				offset = cpu_regist_bx(cpu) + cpu_regist_di(cpu) + mem_eip_load8_se(cpu);
-				break;
-			case 0x02:	// [BP + SI + disp8]
-				offset = cpu_regist_bp(cpu) + cpu_regist_si(cpu) + mem_eip_load8_se(cpu);
-				break;
-			case 0x03:	// [BP + DI + disp8]
-				offset = cpu_regist_bp(cpu) + cpu_regist_di(cpu) + mem_eip_load8_se(cpu);
-				break;
-			case 0x04:	// [SI + disp8]
-				offset = cpu_regist_si(cpu) + mem_eip_load8_se(cpu);
-				break;
-			case 0x05:	// [DI + disp8]
-				offset = cpu_regist_di(cpu) + mem_eip_load8_se(cpu);
-				break;
-			case 0x06:	// [BP + disp8]
-				offset = cpu_regist_bp(cpu) + mem_eip_load8_se(cpu);
-				break;
-			case 0x07:	// [BX + disp8]
-				offset = cpu_regist_bx(cpu) + mem_eip_load8_se(cpu);
-				break;
-			}
-			result->ptr.voidp = &(cpu->mem[cpu->regs[rm] + offset]);
-			result->type = cpu->prefix.operand_size ? 2 : 4;
-			break;
-		case 0x02:	// [レジスタ + disp16]
-			switch (rm) {
-			case 0x00:	// [BX + SI + disp16]
-				offset = cpu_regist_bx(cpu) + cpu_regist_si(cpu) + mem_eip_load16(cpu);
-				break;
-			case 0x01:	// [BX + DI + disp16]
-				offset = cpu_regist_bx(cpu) + cpu_regist_di(cpu) + mem_eip_load16(cpu);
-				break;
-			case 0x02:	// [BP + SI + disp16]
-				offset = cpu_regist_bp(cpu) + cpu_regist_si(cpu) + mem_eip_load16(cpu);
-				break;
-			case 0x03:	// [BP + DI + disp16]
-				offset = cpu_regist_bp(cpu) + cpu_regist_di(cpu) + mem_eip_load16(cpu);
-				break;
-			case 0x04:	// [SI + disp16]
-				offset = cpu_regist_si(cpu) + mem_eip_load16(cpu);
-				break;
-			case 0x05:	// [DI + disp16]
-				offset = cpu_regist_di(cpu) + mem_eip_load16(cpu);
-				break;
-			case 0x06:	// [BP + disp16]
-				offset = cpu_regist_bp(cpu) + mem_eip_load16(cpu);
-				break;
-			case 0x07:	// [BX + disp16]
-				offset = cpu_regist_bx(cpu) + mem_eip_load16(cpu);
-				break;
-			}
-			result->ptr.voidp = &(cpu->mem[cpu->regs[rm] + offset]);
-			result->type = cpu->prefix.operand_size ? 2 : 4;
-			break;
-		case 0x03:	// レジスタ
-			result->ptr.voidp = &(cpu->regs[rm]);
-			result->type = 4;
-			break;
-		}
+		offset = cpu_modrm_offset(cpu);
+		result->ptr.voidp = &(cpu->mem[offset]);
+		result->type = cpu->prefix.operand_size ? 2 : 4;
 	}
 }
 
@@ -1227,24 +1077,18 @@ void exec_cpux86(CPUx86 *cpu)
 
 			case 0x10:	// 10 /r : adc r/m8 r8
 				// modrm
-log_debug("0x10 load_modrm");
 				mem_eip_load_modrm(cpu);
 
 				// dst register/memory
-log_debug("0x10 dst");
 				cpu_modrm_address(cpu, &operand1, 0);
 				operand1.type = 1;
 
 				// src register
-log_debug("0x10 dst");
 				operand2.ptr.voidp = &(cpu->regs[cpu_modrm_reg(cpu)]);
 				operand2.type = 1;
 
-log_debug("0x10 adc");
 				// operation
 				opcode_adc(cpu, &operand1, &operand2);
-log_debug("0x10 dst ok");
-
 				break;
 
 			case 0x11:	// 11 /r sz : adc r/m32 r32
@@ -1294,6 +1138,22 @@ log_debug("0x10 dst ok");
 
 				// operation
 				opcode_xor(cpu, &operand1, &operand2);
+				break;
+
+			case 0x39:	// 39 /r sz : cmp r/m32 r32
+				// modrm
+				mem_eip_load_modrm(cpu);
+
+				// xrc1 register/memory
+				cpu_modrm_address(cpu, &operand1, 0);
+				operand1.type = 4;
+
+				// src2 register
+				operand2.ptr.voidp = &(cpu->regs[cpu_modrm_reg(cpu)]);
+				operand2.type = 4;
+
+				// operation
+				opcode_cmp(cpu, &operand1, &operand2);
 				break;
 
 			case 0x3C:	// 3C ib : cmp al imm8
@@ -1447,6 +1307,21 @@ log_debug("0x10 dst ok");
 				// operation
 				opcode_test(cpu, &operand1, &operand2);
 				break;
+			case 0x88:	// 88 /r : mov r/m8 r8
+				// modrm
+				mem_eip_load_modrm(cpu);
+
+				// dst register/memory
+				cpu_modrm_address(cpu, &operand1, 0);
+				operand1.type = 1;
+
+				// src register
+				operand2.ptr.voidp = &(cpu->regs[cpu_modrm_rm(cpu)]);
+				operand2.type = 1;
+
+				// operation
+				opcode_mov(cpu, &operand1, &operand2);
+				break;
 			case 0x89:	// 89 /r sz : mov r/m32 r32
 				// modrm
 				mem_eip_load_modrm(cpu);
@@ -1598,9 +1473,6 @@ log_debug("0x10 dst ok");
 				mem_eip_load_modrm(cpu);
 				switch (cpu_modrm_reg(cpu)) {
 				case 0:
-					// ???
-					mem_eip_load8(cpu);	// todo
-
 					// dst register/memory
 					cpu_modrm_address(cpu, &operand1, 0);
 
