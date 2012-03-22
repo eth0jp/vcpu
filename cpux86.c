@@ -263,6 +263,143 @@ int cpu_sib_base(CPUx86 *cpu)
 
 #define cpu_operand_size(cpu)	((cpu_cr0(cpu, CR0_PE)==(cpu)->prefix.operand_size) ? 2 : 4)
 
+uint32 cpu_modrm_offset(CPUx86 *cpu)
+{
+	int mod;
+	int rm;
+	uint32 offset;
+
+	mod = cpu_modrm_mod(cpu);
+	rm = cpu_modrm_rm(cpu);
+	offset = 0xFFFFFFFF;
+
+	if (cpu_cr0(cpu, CR0_PE)) {
+		// プロテクトモード
+		switch (mod) {
+		case 0x00:
+			switch (rm) {
+			case 0x00:	// [EAX]
+			case 0x01:	// [ECX]
+			case 0x02:	// [EDX]
+			case 0x03:	// [EBX]
+			case 0x06:	// [ESI]
+			case 0x07:	// [EDI]
+				offset = cpu->regs[rm];
+				break;
+			case 0x04:	// [<SIB>]
+				// todo
+				break;
+			case 0x05:	// [disp32]
+				offset = mem_eip_load32(cpu);
+				break;
+			}
+			break;
+		case 0x01:
+			switch (rm) {
+			case 0x00:	// [EAX + disp8]
+			case 0x01:	// [ECX + disp8]
+			case 0x02:	// [EDX + disp8]
+			case 0x03:	// [EBX + disp8]
+			case 0x05:	// [EBP + disp8]
+			case 0x06:	// [ESI + disp8]
+			case 0x07:	// [EDI + disp8]
+				offset = cpu->regs[rm] + mem_eip_load8_se(cpu);
+				break;
+			case 0x04:	// [<SIB> + disp8]
+				// todo
+				break;
+			}
+			break;
+		case 0x02:
+			switch (rm) {
+			case 0x00:	// [EAX + disp16]
+			case 0x01:	// [ECX + disp16]
+			case 0x02:	// [EDX + disp16]
+			case 0x03:	// [EBX + disp16]
+			case 0x05:	// [EBP + disp16]
+			case 0x06:	// [ESI + disp16]
+			case 0x07:	// [EDI + disp16]
+				offset = cpu->regs[rm] + mem_eip_load16(cpu);
+				break;
+			case 0x04:	// [<SIB> + disp16]
+				// todo
+				break;
+			}
+			break;
+		case 0x03:
+			break;
+		}
+	} else {
+		// リアルモード
+		switch (mod) {
+		case 0x00:	// [レジスタ + レジスタ]
+			offset = cpu->regs[rm];
+			break;
+		case 0x01:	// [レジスタ + disp8]
+			switch (rm) {
+			case 0x00:	// [BX + SI + disp8]
+				offset = cpu_regist_bx(cpu) + cpu_regist_si(cpu) + mem_eip_load8_se(cpu);
+				break;
+			case 0x01:	// [BX + DI + disp8]
+				offset = cpu_regist_bx(cpu) + cpu_regist_di(cpu) + mem_eip_load8_se(cpu);
+				break;
+			case 0x02:	// [BP + SI + disp8]
+				offset = cpu_regist_bp(cpu) + cpu_regist_si(cpu) + mem_eip_load8_se(cpu);
+				break;
+			case 0x03:	// [BP + DI + disp8]
+				offset = cpu_regist_bp(cpu) + cpu_regist_di(cpu) + mem_eip_load8_se(cpu);
+				break;
+			case 0x04:	// [SI + disp8]
+				offset = cpu_regist_si(cpu) + mem_eip_load8_se(cpu);
+				break;
+			case 0x05:	// [DI + disp8]
+				offset = cpu_regist_di(cpu) + mem_eip_load8_se(cpu);
+				break;
+			case 0x06:	// [BP + disp8]
+				offset = cpu_regist_bp(cpu) + mem_eip_load8_se(cpu);
+				break;
+			case 0x07:	// [BX + disp8]
+				offset = cpu_regist_bx(cpu) + mem_eip_load8_se(cpu);
+				break;
+			}
+			offset += cpu->regs[rm];
+			break;
+		case 0x02:	// [レジスタ + disp16]
+			switch (rm) {
+			case 0x00:	// [BX + SI + disp16]
+				offset = cpu_regist_bx(cpu) + cpu_regist_si(cpu) + mem_eip_load16(cpu);
+				break;
+			case 0x01:	// [BX + DI + disp16]
+				offset = cpu_regist_bx(cpu) + cpu_regist_di(cpu) + mem_eip_load16(cpu);
+				break;
+			case 0x02:	// [BP + SI + disp16]
+				offset = cpu_regist_bp(cpu) + cpu_regist_si(cpu) + mem_eip_load16(cpu);
+				break;
+			case 0x03:	// [BP + DI + disp16]
+				offset = cpu_regist_bp(cpu) + cpu_regist_di(cpu) + mem_eip_load16(cpu);
+				break;
+			case 0x04:	// [SI + disp16]
+				offset = cpu_regist_si(cpu) + mem_eip_load16(cpu);
+				break;
+			case 0x05:	// [DI + disp16]
+				offset = cpu_regist_di(cpu) + mem_eip_load16(cpu);
+				break;
+			case 0x06:	// [BP + disp16]
+				offset = cpu_regist_bp(cpu) + mem_eip_load16(cpu);
+				break;
+			case 0x07:	// [BX + disp16]
+				offset = cpu_regist_bx(cpu) + mem_eip_load16(cpu);
+				break;
+			}
+			offset += cpu->regs[rm];
+			break;
+		case 0x03:	// レジスタ
+			break;
+		}
+	}
+	return offset;
+}
+
 void cpu_modrm_address(CPUx86 *cpu, uintp *result, int use_reg)
 {
 	int mod;
@@ -632,6 +769,11 @@ void opcode_js(CPUx86 *cpu, uintp *rel)
 	}
 }
 
+void opcode_lea(CPUx86 *cpu, uintp *dst, uintp *src)
+{
+	set_uintp_val(dst, uintp_val(src));
+}
+
 void opcode_mov(CPUx86 *cpu, uintp *dst, uintp *src)
 {
 	set_uintp_val(dst, uintp_val(src));
@@ -945,8 +1087,9 @@ void exec_cpux86(CPUx86 *cpu)
 	int is_prefix;
 	uintp operand1;
 	uintp operand2;
+	uint32 offset;
 
-	while (c++<200) {
+	while (c++<300) {
 		log_info("[%d]\n", c);
 		dump_cpu(cpu);
 
@@ -1323,15 +1466,36 @@ log_debug("0x10 dst ok");
 				// modrm
 				mem_eip_load_modrm(cpu);
 
-				// src register
+				// dst register
 				operand1.ptr.voidp = &(cpu->regs[cpu_modrm_reg(cpu)]);
 				operand1.type = 4;
 
-				// dst register/memory
+				// src register/memory
 				cpu_modrm_address(cpu, &operand2, 0);
 
 				// operation
 				opcode_mov(cpu, &operand1, &operand2);
+				break;
+
+			case 0x8D:	// 8D /r sz : lea r32 m
+				// modrm
+				mem_eip_load_modrm(cpu);
+
+				// dst register
+				operand1.ptr.voidp = &(cpu->regs[cpu_modrm_reg(cpu)]);
+				operand1.type = 4;
+
+				// src memory
+				offset = cpu_modrm_offset(cpu);
+				if (offset==0xFFFFFFFF) {
+					// exception UD
+					// todo
+				}
+				operand2.ptr.voidp = &(offset);
+				operand2.type = 4;
+
+				// operation
+				opcode_lea(cpu, &operand1, &operand2);
 				break;
 
 			// 0xB0
