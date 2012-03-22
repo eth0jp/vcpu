@@ -221,29 +221,18 @@ uint32 seg_ss(CPUx86 *cpu)
 
 void mem_eip_load_modrm(CPUx86 *cpu)
 {
-	cpu->modrm = mem_eip_load8(cpu);
-	if (cpu_cr0(cpu, CR0_PE) && cpu_modrm_mod(cpu)!=3 && cpu_modrm_rm(cpu)==5) {
-	//if (cpu_modrm_mod(cpu)!=3 && cpu_modrm_rm(cpu)==5) {
+	uint8 modrm;
+	modrm = mem_eip_load8(cpu);
+	cpu->modrm_mod = modrm>>6 & 0x03;
+	cpu->modrm_reg = modrm>>3 & 0x07;
+	cpu->modrm_rm = modrm & 0x07;
+	if (cpu_cr0(cpu, CR0_PE) && cpu->modrm_mod!=3 && cpu->modrm_rm==5) {
+	//if (cpu->modrm_mod!=3 && cpu->modrm_rm==5) {
 		log_info("load sib\n");
 		cpu->sib = mem_eip_load8(cpu);
 	} else {
 		cpu->sib = 0;
 	}
-}
-
-int cpu_modrm_mod(CPUx86 *cpu)
-{
-	return cpu->modrm>>6 & 0x03;
-}
-
-int cpu_modrm_reg(CPUx86 *cpu)
-{
-	return cpu->modrm>>3 & 0x07;
-}
-
-int cpu_modrm_rm(CPUx86 *cpu)
-{
-	return cpu->modrm & 0x07;
 }
 
 int cpu_sib_scale(CPUx86 *cpu)
@@ -269,8 +258,8 @@ uint32 cpu_modrm_offset(CPUx86 *cpu)
 	int rm;
 	uint32 offset;
 
-	mod = cpu_modrm_mod(cpu);
-	rm = cpu_modrm_rm(cpu);
+	mod = cpu->modrm_mod;
+	rm = cpu->modrm_rm;
 	offset = 0xFFFFFFFF;
 
 	if (cpu_cr0(cpu, CR0_PE)) {
@@ -415,8 +404,8 @@ void cpu_modrm_address(CPUx86 *cpu, uintp *result)
 	int rm;
 	uint32 offset;
 
-	mod = cpu_modrm_mod(cpu);
-	rm = cpu_modrm_rm(cpu);
+	mod = cpu->modrm_mod;
+	rm = cpu->modrm_rm;
 
 	if (mod==3) {
 		result->ptr.voidp = &(cpu->regs[rm]);
@@ -870,6 +859,7 @@ void dump_cpu(CPUx86 *cpu)
 	char b[33];
 	int i;
 	char *regs_arr[] = {"eax", "ecx", "edx", "ebx", "esp", "ebp", "esi", "edi"};
+	uint8 modrm;
 
 	printf("dump_cpu:\n");
 	printf("  eip: 0x%X\n", cpu->eip);
@@ -880,8 +870,9 @@ void dump_cpu(CPUx86 *cpu)
 
 	printf("  eflags: 0x%X\n", cpu->eflags);
 
-	int2bin(b, cpu->modrm, 8);
-	printf("  modrm: 0x%X mod: %c%c reg: %c%c%c rm: %c%c%c\n", cpu->modrm, b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]);
+	modrm = cpu->modrm_mod<<6 | cpu->modrm_reg<<3 | cpu->modrm_rm;
+	int2bin(b, modrm, 8);
+	printf("  modrm: 0x%X mod: %c%c reg: %c%c%c rm: %c%c%c\n", modrm, b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]);
 }
 
 
@@ -909,7 +900,9 @@ void delete_cpux86(CPUx86 *cpu)
 void cpu_current_reset(CPUx86 *cpu)
 {
 	memset(&(cpu->prefix), 0, sizeof(cpu->prefix));
-	//cpu->modrm = 0;
+	//cpu->modrm_mod = 0;
+	//cpu->modrm_reg = 0;
+	//cpu->modrm_rm = 0;
 	//cpu->sib = 0;
 }
 
@@ -1027,7 +1020,7 @@ void exec_cpux86(CPUx86 *cpu)
 				operand1.type = 1;
 
 				// src register
-				operand2.ptr.voidp = &(cpu->regs[cpu_modrm_reg(cpu)]);
+				operand2.ptr.voidp = &(cpu->regs[cpu->modrm_reg]);
 				operand2.type = 1;
 
 				// operation
@@ -1039,7 +1032,7 @@ void exec_cpux86(CPUx86 *cpu)
 				mem_eip_load_modrm(cpu);
 
 				// dst register
-				operand1.ptr.voidp = &(cpu->regs[cpu_modrm_reg(cpu)]);
+				operand1.ptr.voidp = &(cpu->regs[cpu->modrm_reg]);
 				operand1.type = 1;
 
 				// src register/memory
@@ -1055,7 +1048,7 @@ void exec_cpux86(CPUx86 *cpu)
 				mem_eip_load_modrm(cpu);
 
 				// dst register
-				operand1.ptr.voidp = &(cpu->regs[cpu_modrm_reg(cpu)]);
+				operand1.ptr.voidp = &(cpu->regs[cpu->modrm_reg]);
 				operand1.type = 4;
 
 				// src register/memory
@@ -1084,7 +1077,7 @@ void exec_cpux86(CPUx86 *cpu)
 				operand1.type = 1;
 
 				// src register
-				operand2.ptr.voidp = &(cpu->regs[cpu_modrm_reg(cpu)]);
+				operand2.ptr.voidp = &(cpu->regs[cpu->modrm_reg]);
 				operand2.type = 1;
 
 				// operation
@@ -1100,7 +1093,7 @@ void exec_cpux86(CPUx86 *cpu)
 				operand1.type = 4;
 
 				// src register
-				operand2.ptr.voidp = &(cpu->regs[cpu_modrm_reg(cpu)]);
+				operand2.ptr.voidp = &(cpu->regs[cpu->modrm_reg]);
 				operand2.type = 4;
 
 				// operation
@@ -1116,7 +1109,7 @@ void exec_cpux86(CPUx86 *cpu)
 				operand1.type = 1;
 
 				// src register
-				operand2.ptr.voidp = &(cpu->regs[cpu_modrm_reg(cpu)]);
+				operand2.ptr.voidp = &(cpu->regs[cpu->modrm_reg]);
 				operand2.type = 1;
 
 				// operation
@@ -1133,7 +1126,7 @@ void exec_cpux86(CPUx86 *cpu)
 				operand1.type = 4;
 
 				// src register
-				operand2.ptr.voidp = &(cpu->regs[cpu_modrm_reg(cpu)]);
+				operand2.ptr.voidp = &(cpu->regs[cpu->modrm_reg]);
 				operand2.type = 4;
 
 				// operation
@@ -1149,7 +1142,7 @@ void exec_cpux86(CPUx86 *cpu)
 				operand1.type = 4;
 
 				// src2 register
-				operand2.ptr.voidp = &(cpu->regs[cpu_modrm_reg(cpu)]);
+				operand2.ptr.voidp = &(cpu->regs[cpu->modrm_reg]);
 				operand2.type = 4;
 
 				// operation
@@ -1252,7 +1245,7 @@ void exec_cpux86(CPUx86 *cpu)
 				operand2.type = 1;
 
 				// operation
-				switch (cpu_modrm_reg(cpu)) {
+				switch (cpu->modrm_reg) {
 				case 0:
 					opcode_add(cpu, &operand1, &operand2);
 					break;
@@ -1287,7 +1280,7 @@ void exec_cpux86(CPUx86 *cpu)
 				cpu_modrm_address(cpu, &operand1);
 
 				// src2 regisetr
-				operand2.ptr.voidp = &(cpu->regs[cpu_modrm_rm(cpu)]);
+				operand2.ptr.voidp = &(cpu->regs[cpu->modrm_rm]);
 				operand2.type = 1;
 
 				// operation
@@ -1301,7 +1294,7 @@ void exec_cpux86(CPUx86 *cpu)
 				cpu_modrm_address(cpu, &operand1);
 
 				// src2 register
-				operand2.ptr.voidp = &(cpu->regs[cpu_modrm_rm(cpu)]);
+				operand2.ptr.voidp = &(cpu->regs[cpu->modrm_rm]);
 				operand2.type = 4;
 
 				// operation
@@ -1316,7 +1309,7 @@ void exec_cpux86(CPUx86 *cpu)
 				operand1.type = 1;
 
 				// src register
-				operand2.ptr.voidp = &(cpu->regs[cpu_modrm_rm(cpu)]);
+				operand2.ptr.voidp = &(cpu->regs[cpu->modrm_rm]);
 				operand2.type = 1;
 
 				// operation
@@ -1330,7 +1323,7 @@ void exec_cpux86(CPUx86 *cpu)
 				cpu_modrm_address(cpu, &operand1);
 
 				// src register
-				operand2.ptr.voidp = &(cpu->regs[cpu_modrm_reg(cpu)]);
+				operand2.ptr.voidp = &(cpu->regs[cpu->modrm_reg]);
 				operand2.type = 4;
 
 				// operation
@@ -1342,7 +1335,7 @@ void exec_cpux86(CPUx86 *cpu)
 				mem_eip_load_modrm(cpu);
 
 				// dst register
-				operand1.ptr.voidp = &(cpu->regs[cpu_modrm_reg(cpu)]);
+				operand1.ptr.voidp = &(cpu->regs[cpu->modrm_reg]);
 				operand1.type = 4;
 
 				// src register/memory
@@ -1357,7 +1350,7 @@ void exec_cpux86(CPUx86 *cpu)
 				mem_eip_load_modrm(cpu);
 
 				// dst register
-				operand1.ptr.voidp = &(cpu->regs[cpu_modrm_reg(cpu)]);
+				operand1.ptr.voidp = &(cpu->regs[cpu->modrm_reg]);
 				operand1.type = 4;
 
 				// src memory
@@ -1431,7 +1424,7 @@ void exec_cpux86(CPUx86 *cpu)
 				operand2.type = 1;
 
 				// operation
-				switch (cpu_modrm_reg(cpu)) {
+				switch (cpu->modrm_reg) {
 				case 0:	// C0 /0 ib : rol r/m8 imm8
 					//opcode_rol(cpu, &operand1, &operand2);
 					log_error("todo 0xC0 /0\n");
@@ -1471,7 +1464,7 @@ void exec_cpux86(CPUx86 *cpu)
 
 			case 0xC7:	// C7 /0 id sz : mov r/m32 imm32
 				mem_eip_load_modrm(cpu);
-				switch (cpu_modrm_reg(cpu)) {
+				switch (cpu->modrm_reg) {
 				case 0:
 					// dst register/memory
 					cpu_modrm_address(cpu, &operand1);
@@ -1484,7 +1477,7 @@ void exec_cpux86(CPUx86 *cpu)
 					opcode_mov(cpu, &operand1, &operand2);
 					break;
 				default:
-					log_error("not mapped opcode: 0xC0 reg %d\n", cpu_modrm_reg(cpu));
+					log_error("not mapped opcode: 0xC0 reg %d\n", cpu->modrm_reg);
 					break;
 				}
 				break;
@@ -1560,7 +1553,7 @@ void exec_cpux86(CPUx86 *cpu)
 			case 0xFE:
 				mem_eip_load_modrm(cpu);
 
-				switch (cpu_modrm_reg(cpu)) {
+				switch (cpu->modrm_reg) {
 				case 0:	// FE /0 : inc r/m8
 					// target
 					cpu_modrm_address(cpu, &operand1);
@@ -1578,7 +1571,7 @@ void exec_cpux86(CPUx86 *cpu)
 					opcode_dec(cpu, &operand1);
 					break;
 				default:
-					log_error("not mapped opcode: 0xFE reg %d\n", cpu_modrm_reg(cpu));
+					log_error("not mapped opcode: 0xFE reg %d\n", cpu->modrm_reg);
 					break;
 				}
 				break;
@@ -1599,7 +1592,7 @@ void exec_cpux86(CPUx86 *cpu)
 				mem_eip_load_modrm(cpu);
 
 				// dst register
-				operand1.ptr.voidp = &(cpu->regs[cpu_modrm_reg(cpu)]);
+				operand1.ptr.voidp = &(cpu->regs[cpu->modrm_reg]);
 				operand1.type = 4;
 
 				// src register/memory
@@ -1615,7 +1608,7 @@ void exec_cpux86(CPUx86 *cpu)
 				mem_eip_load_modrm(cpu);
 
 				// dst register
-				operand1.ptr.voidp = &(cpu->regs[cpu_modrm_reg(cpu)]);
+				operand1.ptr.voidp = &(cpu->regs[cpu->modrm_reg]);
 				operand1.type = 4;
 
 				// src register/memory

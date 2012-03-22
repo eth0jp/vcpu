@@ -78,7 +78,9 @@ typedef struct {
 		uint32 vex3;			// 0xC4 VEXプリフィックス
 		uint16 vex2;			// 0xC5 VEXプリフィックス
 	} prefix;
-	uint8 modrm;
+	uint8 modrm_mod;
+	uint8 modrm_reg;
+	uint8 modrm_rm;
 	uint8 sib;
 } CPUx86;
 
@@ -260,9 +262,6 @@ extern uint32 seg_ss(CPUx86 *cpu);
 
 // modrm
 extern void mem_eip_load_modrm(CPUx86 *cpu);
-extern int cpu_modrm_mod(CPUx86 *cpu);
-extern int cpu_modrm_reg(CPUx86 *cpu);
-extern int cpu_modrm_rm(CPUx86 *cpu);
 extern int cpu_sib_scale(CPUx86 *cpu);
 extern int cpu_sib_index(CPUx86 *cpu);
 extern int cpu_sib_base(CPUx86 *cpu);
