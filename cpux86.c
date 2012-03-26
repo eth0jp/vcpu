@@ -1178,9 +1178,6 @@ void exec_cpux86(CPUx86 *cpu)
 
 			// 0x20
 			case 0x2D:	// 2D id sz : sub eax imm32
-				// modrm
-				mem_eip_load_modrm(cpu);
-
 				// dst register
 				operand1.ptr.voidp = &(cpu->regs[0]);
 				operand1.type = cpu_operand_size(cpu);
