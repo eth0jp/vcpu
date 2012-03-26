@@ -221,33 +221,21 @@ uint32 seg_ss(CPUx86 *cpu)
 
 void mem_eip_load_modrm(CPUx86 *cpu)
 {
-	uint8 modrm;
-	modrm = mem_eip_load8(cpu);
-	cpu->modrm_mod = modrm>>6 & 0x03;
-	cpu->modrm_reg = modrm>>3 & 0x07;
-	cpu->modrm_rm = modrm & 0x07;
-	if (cpu_cr0(cpu, CR0_PE) && cpu->modrm_mod!=3 && cpu->modrm_rm==5) {
-	//if (cpu->modrm_mod!=3 && cpu->modrm_rm==5) {
-		log_info("load sib\n");
-		cpu->sib = mem_eip_load8(cpu);
+	uint8 tmp;
+	tmp = mem_eip_load8(cpu);
+	cpu->modrm_mod = tmp>>6 & 0x03;
+	cpu->modrm_reg = tmp>>3 & 0x07;
+	cpu->modrm_rm = tmp & 0x07;
+	if (cpu_cr0(cpu, CR0_PE) && cpu->modrm_mod!=3 && cpu->modrm_rm==4) {
+		tmp = mem_eip_load8(cpu);
+		cpu->sib_scale = tmp>>6 & 0x03;
+		cpu->sib_index = tmp>>3 & 0x07;
+		cpu->sib_base = tmp & 0x07;
 	} else {
-		cpu->sib = 0;
+		cpu->sib_scale = 0;
+		cpu->sib_index = 0;
+		cpu->sib_base = 0;
 	}
-}
-
-int cpu_sib_scale(CPUx86 *cpu)
-{
-	return cpu->sib>>6 & 0x03;
-}
-
-int cpu_sib_index(CPUx86 *cpu)
-{
-	return cpu->sib>>3 & 0x03;
-}
-
-int cpu_sib_base(CPUx86 *cpu)
-{
-	return cpu->sib & 0x03;
 }
 
 #define cpu_operand_size(cpu)	((cpu_cr0(cpu, CR0_PE)==(cpu)->prefix.operand_size) ? 2 : 4)
@@ -276,7 +264,7 @@ uint32 cpu_modrm_offset(CPUx86 *cpu)
 				offset = cpu->regs[rm];
 				break;
 			case 0x04:	// [<SIB>]
-				// todo
+				offset = cpu->regs[cpu->sib_base];
 				break;
 			case 0x05:	// [disp32]
 				offset = mem_eip_load32(cpu);
@@ -295,7 +283,7 @@ uint32 cpu_modrm_offset(CPUx86 *cpu)
 				offset = cpu->regs[rm] + mem_eip_load8_se(cpu);
 				break;
 			case 0x04:	// [<SIB> + disp8]
-				// todo
+				offset = cpu->regs[cpu->sib_base] + mem_eip_load8_se(cpu);
 				break;
 			}
 			break;
@@ -311,7 +299,7 @@ uint32 cpu_modrm_offset(CPUx86 *cpu)
 				offset = cpu->regs[rm] + mem_eip_load16(cpu);
 				break;
 			case 0x04:	// [<SIB> + disp16]
-				// todo
+				offset = cpu->regs[cpu->sib_base] + mem_eip_load16(cpu);
 				break;
 			}
 			break;
@@ -413,7 +401,7 @@ void cpu_modrm_address(CPUx86 *cpu, uintp *result)
 	} else {
 		offset = cpu_modrm_offset(cpu);
 		result->ptr.voidp = &(cpu->mem[offset]);
-		result->type = cpu->prefix.operand_size ? 2 : 4;
+		result->type = cpu_operand_size(cpu);
 	}
 }
 
@@ -511,13 +499,14 @@ void opcode_call(CPUx86 *cpu, uintp *val)
 
 void opcode_cli(CPUx86 *cpu)
 {
-	if (cpu_cr0(cpu, CR0_PE)) {
+	if (!cpu_cr0(cpu, CR0_PE)) {
 		// Reset Interrupt Flag
 		set_cpu_eflags(cpu, CPU_EFLAGS_IF, 0);
 	} else {
 		if (!cpu_cr0(cpu, CPU_EFLAGS_VM)) {
 			// todo
 			// CPL???
+			log_error("todo opcode_cli !vm\n");
 		} else {
 			if (cpu_cr0(cpu, CPU_EFLAGS_IOPL)==3) {
 				// Reset Interrupt Flag
@@ -525,6 +514,7 @@ void opcode_cli(CPUx86 *cpu)
 			} else {
 				//if (cpu_eflags(cpu, CPU_EFLAGS_IOPL)<3 && VME)
 				// todo
+				log_error("todo opcode_cli\n");
 			}
 		}
 	}
@@ -580,6 +570,7 @@ void opcode_jz(CPUx86 *cpu, uintp *rel)
 			cpu->eip &= 0xFFFF;
 		} else if (rel->type==4) {
 			// todo
+			log_error("todo opcode_jz\n");
 		}
 	}
 }
@@ -592,6 +583,7 @@ void opcode_jnz(CPUx86 *cpu, uintp *rel)
 			cpu->eip &= 0xFFFF;
 		} else if (rel->type==4) {
 			// todo
+			log_error("todo opcode_jnz\n");
 		}
 	}
 }
@@ -604,6 +596,7 @@ void opcode_js(CPUx86 *cpu, uintp *rel)
 			cpu->eip &= 0xFFFF;
 		} else if (rel->type==4) {
 			// todo
+			log_error("todo opcode_js\n");
 		}
 	}
 }
@@ -656,9 +649,23 @@ void opcode_pop(CPUx86 *cpu, uintp *dst)
 {
 	uintp src;
 
+	// todo
+	// 『IA-32 インテル ® アーキテクチャ・ソフト ウェア・デベロッパーズ・マニュアル、上巻』の第 6 章の「スタックアクセスにお けるアドレスサイズ属性」
 	if (cpu_cr0(cpu, CR0_PE)) {
 		// stack size is 32bit
-		// todo
+		if (dst->type==4) {
+			// operand size is 4byte
+			src.ptr.voidp = &(cpu->mem[cpu_regist_esp(cpu)]);
+			src.type = 4;
+			uintp_val_copy(dst, &src);
+			cpu_regist_esp(cpu) += 4;
+		} else if (dst->type==2) {
+			// operand size is 2byte
+			src.ptr.voidp = &(cpu->mem[cpu_regist_esp(cpu)]);
+			src.type = 2;
+			uintp_val_copy(dst, &src);
+			cpu_regist_esp(cpu) += 2;
+		}
 	} else {
 		// stack size is 16bit
 		if (dst->type==2) {
@@ -681,9 +688,22 @@ void opcode_push(CPUx86 *cpu, uintp *val)
 {
 	uintp dst;
 
+	// todo
+	// 『IA-32 インテル ® アーキテクチャ・ソフト ウェア・デベロッパーズ・マニュアル、上巻』の第 6 章の「スタックアクセスにお けるアドレスサイズ属性」
 	if (cpu_cr0(cpu, CR0_PE)) {
 		// stack size is 32bit
-		// todo
+		if (val->type==4) {
+			// operand size is 4byte
+			cpu_regist_esp(cpu) -= 4;
+			dst.ptr.voidp = &(cpu->mem[cpu_regist_esp(cpu)]);
+			dst.type = 4;
+			uintp_val_copy(&dst, val);
+		} else {
+			// operand size is 2byte
+			dst.ptr.voidp = &(cpu->mem[cpu_regist_esp(cpu)]);
+			dst.type = 2;
+			uintp_val_copy(&dst, val);
+		}
 	} else {
 		// stack size is 16bit
 		if (val->type==2) {
@@ -942,6 +962,7 @@ void exec_cpux86(CPUx86 *cpu)
 		while (is_prefix) {
 			opcode = mem_eip_load8(cpu);
 			log_info("eip: %08X opcode: %X\n", cpu->eip-1, opcode);
+			log_info("operand_size: %d\n", cpu_operand_size(cpu));
 
 			// prefix
 			switch (opcode) {
@@ -1033,11 +1054,10 @@ void exec_cpux86(CPUx86 *cpu)
 
 				// dst register/memory
 				cpu_modrm_address(cpu, &operand1);
-				operand1.type = 4;
 
 				// src register
 				operand2.ptr.voidp = &(cpu->regs[cpu->modrm_reg]);
-				operand2.type = 4;
+				operand2.type = cpu_operand_size(cpu);
 
 				// operation
 				opcode_add(cpu, &operand1, &operand2);
@@ -1065,11 +1085,10 @@ void exec_cpux86(CPUx86 *cpu)
 
 				// dst register
 				operand1.ptr.voidp = &(cpu->regs[cpu->modrm_reg]);
-				operand1.type = 4;
+				operand1.type = cpu_operand_size(cpu);
 
 				// src register/memory
 				cpu_modrm_address(cpu, &operand2);
-				operand2.type = 4;
 
 				// operation
 				opcode_add(cpu, &operand1, &operand2);
@@ -1106,11 +1125,10 @@ void exec_cpux86(CPUx86 *cpu)
 
 				// dst register/memory
 				cpu_modrm_address(cpu, &operand1);
-				operand1.type = 4;
 
 				// src register
 				operand2.ptr.voidp = &(cpu->regs[cpu->modrm_reg]);
-				operand2.type = 4;
+				operand2.type = cpu_operand_size(cpu);
 
 				// operation
 				opcode_adc(cpu, &operand1, &operand2);
@@ -1139,11 +1157,11 @@ void exec_cpux86(CPUx86 *cpu)
 
 				// dst register
 				operand1.ptr.voidp = &(cpu->regs[0]);
-				operand1.type = 4;
+				operand1.type = cpu_operand_size(cpu);
 
 				// src immediate
-				operand2.ptr.voidp = mem_eip_ptr(cpu, 4);
-				operand2.type = 4;
+				operand2.ptr.voidp = mem_eip_ptr(cpu, cpu_operand_size(cpu));
+				operand2.type = cpu_operand_size(cpu);
 
 				// operation
 				opcode_sub(cpu, &operand1, &operand2);
@@ -1156,11 +1174,10 @@ void exec_cpux86(CPUx86 *cpu)
 
 				// dst register/memory
 				cpu_modrm_address(cpu, &operand1);
-				operand1.type = 4;
 
 				// src register
 				operand2.ptr.voidp = &(cpu->regs[cpu->modrm_reg]);
-				operand2.type = 4;
+				operand2.type = cpu_operand_size(cpu);
 
 				// operation
 				opcode_xor(cpu, &operand1, &operand2);
@@ -1172,11 +1189,10 @@ void exec_cpux86(CPUx86 *cpu)
 
 				// xrc1 register/memory
 				cpu_modrm_address(cpu, &operand1);
-				operand1.type = 4;
 
 				// src2 register
 				operand2.ptr.voidp = &(cpu->regs[cpu->modrm_reg]);
-				operand2.type = 4;
+				operand2.type = cpu_operand_size(cpu);
 
 				// operation
 				opcode_cmp(cpu, &operand1, &operand2);
@@ -1206,7 +1222,7 @@ void exec_cpux86(CPUx86 *cpu)
 			case 0x57:	// 57 sz : push edi
 				// src register
 				operand1.ptr.voidp = &(cpu->regs[opcode & 0x07]);
-				operand1.type = 4;
+				operand1.type = cpu_operand_size(cpu);
 
 				// operation
 				opcode_push(cpu, &operand1);
@@ -1222,7 +1238,7 @@ void exec_cpux86(CPUx86 *cpu)
 			case 0x5F:	// 5F sz : pop edi
 				// dst register
 				operand1.ptr.voidp = &(cpu->regs[opcode & 0x07]);
-				operand1.type = 4;
+				operand1.type = cpu_operand_size(cpu);
 
 				// operation
 				opcode_pop(cpu, &operand1);
@@ -1311,6 +1327,7 @@ void exec_cpux86(CPUx86 *cpu)
 
 				// src1 register/memory
 				cpu_modrm_address(cpu, &operand1);
+				operand1.type = 1;
 
 				// src2 regisetr
 				operand2.ptr.voidp = &(cpu->regs[cpu->modrm_rm]);
@@ -1357,25 +1374,30 @@ void exec_cpux86(CPUx86 *cpu)
 
 				// src register
 				operand2.ptr.voidp = &(cpu->regs[cpu->modrm_reg]);
-				operand2.type = 4;
+				operand2.type = cpu_operand_size(cpu);
 
 				// operation
 				opcode_mov(cpu, &operand1, &operand2);
 				break;
 
 			case 0x8B:	// 8B /r sz : mov r32 r/m32
+log_info("eip1: %x\n", cpu->eip);
 				// modrm
 				mem_eip_load_modrm(cpu);
 
+log_info("eip2: %x\n", cpu->eip);
 				// dst register
 				operand1.ptr.voidp = &(cpu->regs[cpu->modrm_reg]);
-				operand1.type = 4;
+				operand1.type = cpu_operand_size(cpu);
 
+log_info("eip3: %x\n", cpu->eip);
 				// src register/memory
 				cpu_modrm_address(cpu, &operand2);
 
+log_info("eip4: %x\n", cpu->eip);
 				// operation
 				opcode_mov(cpu, &operand1, &operand2);
+log_info("eip5: %x\n", cpu->eip);
 				break;
 
 			case 0x8D:	// 8D /r sz : lea r32 m
@@ -1497,7 +1519,7 @@ void exec_cpux86(CPUx86 *cpu)
 
 				// dst register/memory
 				cpu_modrm_address(cpu, &operand1);
-				operand1.type = 4;
+				operand1.type = cpu_operand_size(cpu);
 
 				// src immediate
 				operand2.ptr.voidp = mem_eip_ptr(cpu, 1);
@@ -1550,8 +1572,8 @@ void exec_cpux86(CPUx86 *cpu)
 					cpu_modrm_address(cpu, &operand1);
 
 					// src immediate
-					operand2.ptr.voidp = mem_eip_ptr(cpu, 4);
-					operand2.type = 4;
+					operand2.ptr.voidp = mem_eip_ptr(cpu, cpu_operand_size(cpu));
+					operand2.type = cpu_operand_size(cpu);
 
 					// operation
 					opcode_mov(cpu, &operand1, &operand2);
@@ -1673,7 +1695,7 @@ void exec_cpux86(CPUx86 *cpu)
 
 				// dst register
 				operand1.ptr.voidp = &(cpu->regs[cpu->modrm_reg]);
-				operand1.type = 4;
+				operand1.type = cpu_operand_size(cpu);
 
 				// src register/memory
 				cpu_modrm_address(cpu, &operand2);
@@ -1689,7 +1711,7 @@ void exec_cpux86(CPUx86 *cpu)
 
 				// dst register
 				operand1.ptr.voidp = &(cpu->regs[cpu->modrm_reg]);
-				operand1.type = 4;
+				operand1.type = cpu_operand_size(cpu);
 
 				// src register/memory
 				cpu_modrm_address(cpu, &operand2);

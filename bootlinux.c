@@ -12,6 +12,7 @@ int main(void)
 	cpu->eip = 0x10000;
 	cpu_regist_eax(cpu) = 0x2000000;
 	cpu_regist_ebx(cpu) = 0x200000;
+	set_cpu_cr0(cpu, CR0_PE, 1);
 	run_cpux86(cpu);
 	delete_cpux86(cpu);
 

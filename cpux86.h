@@ -81,7 +81,9 @@ typedef struct {
 	uint8 modrm_mod;
 	uint8 modrm_reg;
 	uint8 modrm_rm;
-	uint8 sib;
+	uint8 sib_scale;
+	uint8 sib_index;
+	uint8 sib_base;
 } CPUx86;
 
 
@@ -262,9 +264,6 @@ extern uint32 seg_ss(CPUx86 *cpu);
 
 // modrm
 extern void mem_eip_load_modrm(CPUx86 *cpu);
-extern int cpu_sib_scale(CPUx86 *cpu);
-extern int cpu_sib_index(CPUx86 *cpu);
-extern int cpu_sib_base(CPUx86 *cpu);
 extern uint32 cpu_modrm_offset(CPUx86 *cpu);
 extern void cpu_modrm_address(CPUx86 *cpu, uintp *result);
 

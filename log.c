@@ -13,6 +13,7 @@ void _log_error(const char* format, ...)
 	va_start(arg, format);
 	_vlog_write("error: ", format, arg);
 	va_end(arg);
+	exit(1);
 }
 
 void _log_warning(const char* format, ...)
