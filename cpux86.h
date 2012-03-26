@@ -264,6 +264,7 @@ extern uint32 seg_ss(CPUx86 *cpu);
 
 // modrm
 extern void mem_eip_load_modrm(CPUx86 *cpu);
+extern uint32 cpu_sib_offset(CPUx86 *cpu);
 extern uint32 cpu_modrm_offset(CPUx86 *cpu);
 extern void cpu_modrm_address(CPUx86 *cpu, uintp *result);
 

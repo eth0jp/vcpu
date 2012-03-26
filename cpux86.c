@@ -238,6 +238,26 @@ void mem_eip_load_modrm(CPUx86 *cpu)
 	}
 }
 
+uint32 cpu_sib_offset(CPUx86 *cpu)
+{
+	uint32 offset = 0;
+
+	// base
+	if (cpu->modrm_mod==0x00 && cpu->sib_base==5) {
+	} else {
+		offset += cpu->regs[cpu->sib_base];
+	}
+
+	// index scale
+	if (cpu->sib_index==4) {
+	} else {
+		offset += cpu->regs[cpu->sib_index] < cpu->sib_scale;
+	}
+
+	return offset;
+}
+
+
 #define cpu_operand_size(cpu)	((cpu_cr0(cpu, CR0_PE)==(cpu)->prefix.operand_size) ? 2 : 4)
 
 uint32 cpu_modrm_offset(CPUx86 *cpu)
@@ -264,7 +284,7 @@ uint32 cpu_modrm_offset(CPUx86 *cpu)
 				offset = cpu->regs[rm];
 				break;
 			case 0x04:	// [<SIB>]
-				offset = cpu->regs[cpu->sib_base];
+				offset = cpu_sib_offset(cpu);
 				break;
 			case 0x05:	// [disp32]
 				offset = mem_eip_load32(cpu);
@@ -283,7 +303,7 @@ uint32 cpu_modrm_offset(CPUx86 *cpu)
 				offset = cpu->regs[rm] + mem_eip_load8_se(cpu);
 				break;
 			case 0x04:	// [<SIB> + disp8]
-				offset = cpu->regs[cpu->sib_base] + mem_eip_load8_se(cpu);
+				offset = cpu_sib_offset(cpu) + mem_eip_load8_se(cpu);
 				break;
 			}
 			break;
@@ -299,7 +319,7 @@ uint32 cpu_modrm_offset(CPUx86 *cpu)
 				offset = cpu->regs[rm] + mem_eip_load16(cpu);
 				break;
 			case 0x04:	// [<SIB> + disp16]
-				offset = cpu->regs[cpu->sib_base] + mem_eip_load16(cpu);
+				offset = cpu_sib_offset(cpu) + mem_eip_load16(cpu);
 				break;
 			}
 			break;
@@ -879,7 +899,7 @@ void dump_cpu(CPUx86 *cpu)
 	char b[33];
 	int i;
 	char *regs_arr[] = {"eax", "ecx", "edx", "ebx", "esp", "ebp", "esi", "edi"};
-	uint8 modrm;
+	uint8 tmp;
 
 	printf("dump_cpu:\n");
 	printf("  eip: 0x%X\n", cpu->eip);
@@ -890,9 +910,15 @@ void dump_cpu(CPUx86 *cpu)
 
 	printf("  eflags: 0x%X\n", cpu->eflags);
 
-	modrm = cpu->modrm_mod<<6 | cpu->modrm_reg<<3 | cpu->modrm_rm;
-	int2bin(b, modrm, 8);
-	printf("  modrm: 0x%X mod: %c%c reg: %c%c%c rm: %c%c%c\n", modrm, b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]);
+	// modrm
+	tmp = cpu->modrm_mod<<6 | cpu->modrm_reg<<3 | cpu->modrm_rm;
+	int2bin(b, tmp, 8);
+	printf("  modrm: 0x%X mod: %c%c reg: %c%c%c rm: %c%c%c\n", tmp, b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]);
+
+	// sib
+	tmp = cpu->sib_scale<<6 | cpu->sib_index<<3 | cpu->sib_base;
+	int2bin(b, tmp, 8);
+	printf("  sib: 0x%X scale: %c%c index: %c%c%c base: %c%c%c\n", tmp, b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]);
 }
 
 
