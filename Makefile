@@ -3,6 +3,7 @@ all: bootlinux bootbin
 
 clean:
 	-rm cpux86.o
+	-rm log.o
 	-rm bootlinux
 	-rm bootlinux.o
 	-rm bootbin

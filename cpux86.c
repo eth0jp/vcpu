@@ -408,20 +408,30 @@ uint32 cpu_modrm_offset(CPUx86 *cpu)
 
 void cpu_modrm_address(CPUx86 *cpu, uintp *result)
 {
-	int mod;
-	int rm;
 	uint32 offset;
 
-	mod = cpu->modrm_mod;
-	rm = cpu->modrm_rm;
-
-	if (mod==3) {
-		result->ptr.voidp = &(cpu->regs[rm]);
+	if (cpu->modrm_mod==3) {
+		result->ptr.voidp = &(cpu->regs[cpu->modrm_rm]);
 		result->type = 4;
 	} else {
 		offset = cpu_modrm_offset(cpu);
 		result->ptr.voidp = &(cpu->mem[offset]);
 		result->type = cpu_operand_size(cpu);
+	}
+}
+
+void cpu_modrm_address_m16_32(CPUx86 *cpu, uintp *limit, uintp *base)
+{
+	uint32 offset;
+
+	if (cpu->modrm_mod==3) {
+		log_error("cpu_modrm_address_m16_32 exception\n");
+	} else {
+		offset = cpu_modrm_offset(cpu);
+		limit->ptr.voidp = &(cpu->mem[offset]);
+		limit->type = 2;
+		base->ptr.voidp = &(cpu->mem[offset+2]);
+		base->type = 4;
 	}
 }
 
@@ -577,6 +587,17 @@ void opcode_into(CPUx86 *cpu)
 	// todo
 }
 
+void opcode_jle_short(CPUx86 *cpu, uintp *rel)
+{
+	if (cpu_eflags(cpu, CPU_EFLAGS_ZF) || cpu_eflags(cpu, CPU_EFLAGS_SF)!=cpu_eflags(cpu, CPU_EFLAGS_OF)) {
+		opcode_jmp_short(cpu, rel);
+	}
+}
+
+void opcode_jmp_far(CPUx86 *cpu, uintp *segment, uintp *offset)
+{
+}
+
 void opcode_jmp_short(CPUx86 *cpu, uintp *rel)
 {
 	cpu->eip += (int)uintp_val(rel);
@@ -624,6 +645,17 @@ void opcode_js(CPUx86 *cpu, uintp *rel)
 void opcode_lea(CPUx86 *cpu, uintp *dst, uintp *src)
 {
 	set_uintp_val(dst, uintp_val(src));
+}
+
+void opcode_lgdt(CPUx86 *cpu, uintp *limit, uintp *base)
+{
+	if (cpu_operand_size(cpu)==2) {
+		cpu->gdtr.limit = uintp_val(limit);
+		cpu->gdtr.base = uintp_val(base) & 0x00FFFFFF;
+	} else if (cpu_operand_size(cpu)==4) {
+		cpu->gdtr.limit = uintp_val(limit);
+		cpu->gdtr.base = uintp_val(base);
+	}
 }
 
 void opcode_mov(CPUx86 *cpu, uintp *dst, uintp *src)
@@ -988,7 +1020,7 @@ void exec_cpux86(CPUx86 *cpu)
 		while (is_prefix) {
 			opcode = mem_eip_load8(cpu);
 			log_info("eip: %08X opcode: %X\n", cpu->eip-1, opcode);
-			log_info("operand_size: %d\n", cpu_operand_size(cpu));
+			//log_info("operand_size: %d\n", cpu_operand_size(cpu));
 
 			// prefix
 			switch (opcode) {
@@ -1190,6 +1222,21 @@ void exec_cpux86(CPUx86 *cpu)
 				opcode_sub(cpu, &operand1, &operand2);
 				break;
 
+			case 0x29:	// 29 /r sz : sub r/m32 r32
+				// modrm
+				mem_eip_load_modrm(cpu);
+
+				// dst register/memory
+				cpu_modrm_address(cpu, &operand1);
+
+				// src register
+				operand2.ptr.voidp = &(cpu->regs[cpu->modrm_reg]);
+				operand2.type = cpu_operand_size(cpu);
+
+				// operation
+				opcode_sub(cpu, &operand1, &operand2);
+				break;
+
 			// 0x30
 			case 0x31:	// 31 /r sz : xor r/m32 r32
 				// modrm
@@ -1295,7 +1342,67 @@ void exec_cpux86(CPUx86 *cpu)
 				opcode_js(cpu, &operand1);
 				break;
 
+			case 0x7E:	// 7E cb : jle rel8
+				// relative address
+				operand1.ptr.voidp = mem_eip_ptr(cpu, 1);
+				operand1.type = 1;
+
+				// operation
+				opcode_jle_short(cpu, &operand1);
+				break;
+
 			// 0x80
+			case 0x80:
+			case 0x82:
+				// 80 /0 ib : add r/m8 imm8
+				// 80 /1 ib : or r/m8 imm8
+				// 80 /2 ib : adc r/m8 imm8
+				// 80 /3 ib : sbb r/m8 imm8
+				// 80 /4 ib : and r/m8 imm8
+				// 80 /5 ib : sub r/m8 imm8
+				// 80 /6 ib : xor r/m8 imm8
+				// 80 /7 ib : cmp r/m8 imm8
+
+				// modrm
+				mem_eip_load_modrm(cpu);
+
+				// dst register/memory
+				cpu_modrm_address(cpu, &operand1);
+				operand1.type = 1;
+
+				// src immediate
+				operand2.ptr.voidp = mem_eip_ptr(cpu, 1);
+				operand2.type = 1;
+
+				// operation
+				switch (cpu->modrm_reg) {
+				case 0:
+					opcode_add(cpu, &operand1, &operand2);
+					break;
+				case 1:
+					opcode_or(cpu, &operand1, &operand2);
+					break;
+				case 2:
+					opcode_adc(cpu, &operand1, &operand2);
+					break;
+				case 3:
+					opcode_sbb(cpu, &operand1, &operand2);
+					break;
+				case 4:
+					opcode_and(cpu, &operand1, &operand2);
+					break;
+				case 5:
+					opcode_sub(cpu, &operand1, &operand2);
+					break;
+				case 6:
+					opcode_xor(cpu, &operand1, &operand2);
+					break;
+				case 7:
+					opcode_cmp(cpu, &operand1, &operand2);
+					break;
+				}
+				break;
+
 			case 0x83:
 				// 83 /0 ib sz : add r/m32 imm8
 				// 83 /1 ib sz : or r/m32 imm8
@@ -1344,6 +1451,7 @@ void exec_cpux86(CPUx86 *cpu)
 					break;
 				}
 				break;
+
 			case 0x84:	// 84 /r : test r/m8 r8
 				// modrm
 				mem_eip_load_modrm(cpu);
@@ -1359,6 +1467,7 @@ void exec_cpux86(CPUx86 *cpu)
 				// operation
 				opcode_test(cpu, &operand1, &operand2);
 				break;
+
 			case 0x85:	// 85 /r sz : test r/m32 r32
 				// modrm
 				mem_eip_load_modrm(cpu);
@@ -1373,6 +1482,7 @@ void exec_cpux86(CPUx86 *cpu)
 				// operation
 				opcode_test(cpu, &operand1, &operand2);
 				break;
+
 			case 0x88:	// 88 /r : mov r/m8 r8
 				// modrm
 				mem_eip_load_modrm(cpu);
@@ -1388,6 +1498,7 @@ void exec_cpux86(CPUx86 *cpu)
 				// operation
 				opcode_mov(cpu, &operand1, &operand2);
 				break;
+
 			case 0x89:	// 89 /r sz : mov r/m32 r32
 				// modrm
 				mem_eip_load_modrm(cpu);
@@ -1404,23 +1515,18 @@ void exec_cpux86(CPUx86 *cpu)
 				break;
 
 			case 0x8B:	// 8B /r sz : mov r32 r/m32
-log_info("eip1: %x\n", cpu->eip);
 				// modrm
 				mem_eip_load_modrm(cpu);
 
-log_info("eip2: %x\n", cpu->eip);
 				// dst register
 				operand1.ptr.voidp = &(cpu->regs[cpu->modrm_reg]);
 				operand1.type = cpu_operand_size(cpu);
 
-log_info("eip3: %x\n", cpu->eip);
 				// src register/memory
 				cpu_modrm_address(cpu, &operand2);
 
-log_info("eip4: %x\n", cpu->eip);
 				// operation
 				opcode_mov(cpu, &operand1, &operand2);
-log_info("eip5: %x\n", cpu->eip);
 				break;
 
 			case 0x8D:	// 8D /r sz : lea r32 m
@@ -1442,6 +1548,24 @@ log_info("eip5: %x\n", cpu->eip);
 
 				// operation
 				opcode_lea(cpu, &operand1, &operand2);
+				break;
+
+			// 0x90
+			case 0x90:	// nop
+				break;
+
+			// 0xA0
+			case 0xA3:	// A3 sz : mov moffs32 eax
+				// dst memory
+				operand1.ptr.voidp = mem_eip_ptr(cpu, 4);	// todo アドレスサイズ
+				operand1.type = 4;
+
+				// src register
+				operand2.ptr.voidp = &(cpu_regist_eax(cpu));
+				operand1.type = 4;
+
+				// operation
+				opcode_mov(cpu, &operand1, &operand2);
 				break;
 
 			// 0xB0
@@ -1552,22 +1676,22 @@ log_info("eip5: %x\n", cpu->eip);
 				switch (cpu->modrm_reg) {
 				case 0:	// C1 /0 ib sz : rol r/m32 imm8
 					//opcode_rol(cpu, &operand1, &operand2);
-					log_error("todo 0xC0 /0\n");
+					log_error("todo 0xC1 /0\n");
 					exit(1);
 					break;
 				case 1:	// C1 /1 ib sz : ror r/m32 imm8
 					//opcode_ror(cpu, &operand1, &operand2);
-					log_error("todo 0xC0 /1\n");
+					log_error("todo 0xC1 /1\n");
 					exit(1);
 					break;
 				case 2:	// C1 /2 ib sz : rcl r/m32 imm8
 					//opcode_rcl(cpu, &operand1, &operand2);
-					log_error("todo 0xC0 /2\n");
+					log_error("todo 0xC1 /2\n");
 					exit(1);
 					break;
 				case 3:	// C1 /3 ib sz : rcr r/m32 imm8
 					//opcode_rcr(cpu, &operand1, &operand2);
-					log_error("todo 0xC0 /3\n");
+					log_error("todo 0xC1 /3\n");
 					exit(1);
 					break;
 				case 4:	// C1 /4 ib sz : sal r/m32 imm8
@@ -1587,8 +1711,35 @@ log_info("eip5: %x\n", cpu->eip);
 				opcode_ret_neer(cpu);
 				break;
 
-			case 0xC7:	// C7 /0 id sz : mov r/m32 imm32
+			case 0xC6:	// C6 /0 ib : mov r/m8 imm8
+				// modrm
 				mem_eip_load_modrm(cpu);
+
+				// reg
+				switch (cpu->modrm_reg) {
+				case 0:
+					// dst register/memory
+					cpu_modrm_address(cpu, &operand1);
+					operand1.type = 1;
+
+					// src immediate
+					operand2.ptr.voidp = mem_eip_ptr(cpu, 1);
+					operand2.type = 1;
+
+					// operation
+					opcode_mov(cpu, &operand1, &operand2);
+					break;
+				default:
+					log_error("not mapped opcode: 0xC6 reg %d\n", cpu->modrm_reg);
+					break;
+				}
+				break;
+
+			case 0xC7:	// C7 /0 id sz : mov r/m32 imm32
+				// modrm
+				mem_eip_load_modrm(cpu);
+
+				// reg
 				switch (cpu->modrm_reg) {
 				case 0:
 					// dst register/memory
@@ -1602,7 +1753,7 @@ log_info("eip5: %x\n", cpu->eip);
 					opcode_mov(cpu, &operand1, &operand2);
 					break;
 				default:
-					log_error("not mapped opcode: 0xC0 reg %d\n", cpu->modrm_reg);
+					log_error("not mapped opcode: 0xC7 reg %d\n", cpu->modrm_reg);
 					break;
 				}
 				break;
@@ -1638,6 +1789,23 @@ log_info("eip5: %x\n", cpu->eip);
 
 				// operation
 				opcode_call(cpu, &operand1);
+				break;
+
+			case 0xEA:	// EA cp sz : jmp ptr16:32
+				// src offset
+				operand1.ptr.voidp = mem_eip_ptr(cpu, cpu_operand_size(cpu));
+				operand1.type = cpu_operand_size(cpu);
+
+				// src segment
+				operand2.ptr.voidp = mem_eip_ptr(cpu, 2);
+				operand2.type = 2;
+
+				printf("0xEA\n");
+				printf("segment: %x\n", uintp_val(&operand2));
+				printf("offset: %x\n", uintp_val(&operand1));
+				exit(1);
+
+				//opcode_jmp_far;
 				break;
 
 			case 0xEB:	// EB cb : jmp rel8
@@ -1676,6 +1844,7 @@ log_info("eip5: %x\n", cpu->eip);
 				break;
 
 			case 0xFE:
+				// modrm
 				mem_eip_load_modrm(cpu);
 
 				switch (cpu->modrm_reg) {
@@ -1712,6 +1881,47 @@ log_info("eip5: %x\n", cpu->eip);
 
 			// 2byte opcode
 			switch (opcode) {
+			case 0x01:
+				// 0F 01 /0 : sgdt m
+				// 0F 01 /1 : sidt m
+				// 0F 01 /2 : lgdt m16&32
+				// 0F 01 /3 : lidt m16&32
+				// 0F 01 /4 sz : smsw r32/m16
+				// 0F 01 /6 : lmsw r/m16
+				// 0F 01 /7 : invlpg m
+
+				// modrm
+				mem_eip_load_modrm(cpu);
+
+				switch (cpu->modrm_reg) {
+				case 0:
+					log_error("not implemented opcode: 0x0F01 /%d\n", cpu->modrm_reg);
+					break;
+				case 1:
+					log_error("not implemented opcode: 0x0F01 /%d\n", cpu->modrm_reg);
+					break;
+				case 2:
+					// src m16&32
+					cpu_modrm_address_m16_32(cpu, &operand1, &operand2);
+
+					// operation
+					opcode_lgdt(cpu, &operand1, &operand2);
+					break;
+				case 3:
+					log_error("not implemented opcode: 0x0F01 /%d\n", cpu->modrm_reg);
+					break;
+				case 4:
+					log_error("not implemented opcode: 0x0F01 /%d\n", cpu->modrm_reg);
+					break;
+				case 6:
+					log_error("not implemented opcode: 0x0F01 /%d\n", cpu->modrm_reg);
+					break;
+				case 7:
+					log_error("not implemented opcode: 0x0F01 /%d\n", cpu->modrm_reg);
+					break;
+				}
+				break;
+
 			case 0xB6:	// 0F B6 /r sz : movzx r32 r/m8
 				// modrm
 				mem_eip_load_modrm(cpu);
@@ -1742,6 +1952,10 @@ log_info("eip5: %x\n", cpu->eip);
 
 				// operation
 				opcode_movsx(cpu, &operand1, &operand2);
+				break;
+
+			case 0xF1:	// 0F F1 /r : psllw mm mm/m64
+				log_error("not implemented opcode: 0x0FF1\n");
 				break;
 
 			default:

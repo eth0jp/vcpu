@@ -12,6 +12,15 @@ typedef unsigned short uint16;
 typedef unsigned int uint32;
 
 
+// Descriptor
+
+typedef struct {
+	uint32 limit;
+	uint32 base;
+	uint16 attribute;
+} Descriptor;
+
+
 // Descriptor Table Register
 
 typedef struct {
@@ -267,6 +276,7 @@ extern void mem_eip_load_modrm(CPUx86 *cpu);
 extern uint32 cpu_sib_offset(CPUx86 *cpu);
 extern uint32 cpu_modrm_offset(CPUx86 *cpu);
 extern void cpu_modrm_address(CPUx86 *cpu, uintp *result);
+extern void cpu_modrm_address_m16_32(CPUx86 *cpu, uintp *limit, uintp *base);
 
 // opcode
 extern void opcode_aam(CPUx86 *cpu, uintp *val);
