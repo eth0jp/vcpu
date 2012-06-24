@@ -533,12 +533,12 @@ void opcode_cli(CPUx86 *cpu)
 		// Reset Interrupt Flag
 		set_cpu_eflags(cpu, CPU_EFLAGS_IF, 0);
 	} else {
-		if (!cpu_cr0(cpu, CPU_EFLAGS_VM)) {
+		if (!cpu_eflags(cpu, CPU_EFLAGS_VM)) {
 			// todo
 			// CPL???
 			log_error("todo opcode_cli !vm\n");
 		} else {
-			if (cpu_cr0(cpu, CPU_EFLAGS_IOPL)==3) {
+			if (cpu_eflags(cpu, CPU_EFLAGS_IOPL)==3) {
 				// Reset Interrupt Flag
 				set_cpu_eflags(cpu, CPU_EFLAGS_IF, 0);
 			} else {
@@ -596,6 +596,14 @@ void opcode_jle_short(CPUx86 *cpu, uintp *rel)
 
 void opcode_jmp_far(CPUx86 *cpu, uintp *segment, uintp *offset)
 {
+	uint32 tempEIP = 0;
+
+	if (!cpu_cr0(cpu, CR0_PE) || (cpu_cr0(cpu, CR0_PE) && cpu_eflags(cpu, CPU_EFLAGS_VM))) {
+		// real-address or virtual-8086 mode
+		// todo
+	} else if (cpu_cr0(cpu, CR0_PE) && !cpu_eflags(cpu, CPU_EFLAGS_VM)) {
+		// Protected mode, not virtual-8086 mode
+	}
 }
 
 void opcode_jmp_short(CPUx86 *cpu, uintp *rel)
@@ -1800,12 +1808,8 @@ void exec_cpux86(CPUx86 *cpu)
 				operand2.ptr.voidp = mem_eip_ptr(cpu, 2);
 				operand2.type = 2;
 
-				printf("0xEA\n");
-				printf("segment: %x\n", uintp_val(&operand2));
-				printf("offset: %x\n", uintp_val(&operand1));
-				exit(1);
-
-				//opcode_jmp_far;
+				// operation
+				opcode_jmp_far(cpu, &operand2, &operand1);
 				break;
 
 			case 0xEB:	// EB cb : jmp rel8
